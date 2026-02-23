@@ -1,0 +1,36 @@
+# ── Cloudflare Tunnel Config ─────────────────────────────────────────
+# Routes spectrapro.ai traffic to your local Docker containers.
+#
+# Replace TUNNEL_ID with your actual tunnel ID from:
+#   cloudflared tunnel list
+# ─────────────────────────────────────────────────────────────────────
+
+tunnel: TUNNEL_ID_HERE
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  # API routes → backend
+  - hostname: spectrapro.ai
+    path: /api/*
+    service: http://backend:5001
+
+  # WebSocket → backend
+  - hostname: spectrapro.ai
+    path: /ws
+    service: http://backend:5001
+
+  # Health check → backend
+  - hostname: spectrapro.ai
+    path: /health
+    service: http://backend:5001
+
+  # Everything else → frontend
+  - hostname: spectrapro.ai
+    service: http://frontend:3000
+
+  # www redirect
+  - hostname: www.spectrapro.ai
+    service: http://frontend:3000
+
+  # Catch-all (required by cloudflared)
+  - service: http_status:404

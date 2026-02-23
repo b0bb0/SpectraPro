@@ -1,0 +1,47 @@
+# ── Spectra Platform — Caddy Reverse Proxy ──────────────────────────
+# HTTP-only config for local network deployment.
+# No TLS — private IPs can't get Let's Encrypt certificates.
+# ─────────────────────────────────────────────────────────────────────
+
+:80 {
+	# ── API & WebSocket ─────────────────────────────────────────────
+	handle /api/* {
+		reverse_proxy backend:5001
+	}
+
+	handle /ws {
+		reverse_proxy backend:5001
+	}
+
+	handle /health {
+		reverse_proxy backend:5001
+	}
+
+	# ── Scanner API ────────────────────────────────────────────────
+	handle /scanner/* {
+		uri strip_prefix /scanner
+		reverse_proxy scanner:5000
+	}
+
+	# ── Frontend (catch-all) ────────────────────────────────────────
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	# ── Security headers ───────────────────────────────────────────
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+
+	# ── Logging ────────────────────────────────────────────────────
+	log {
+		output file /data/logs/access.log {
+			roll_size 100mb
+			roll_keep 5
+		}
+	}
+}

@@ -1,0 +1,130 @@
+# ── Spectra Platform — Production Docker Compose ────────────────────
+# Usage:
+#   1. cp .env.template .env && nano .env   (or run ./scripts/setup-docker.sh)
+#   2. docker compose up -d --build
+#   3. docker compose exec backend npx prisma migrate deploy
+#   4. docker compose exec backend npx prisma db seed  (optional)
+#
+# With AI analysis:
+#   docker compose --profile ai up -d --build
+# ─────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Reverse Proxy (HTTP-only, local network) ────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - spectra
+
+  # ── PostgreSQL ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-spectra_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-spectra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-spectra} -d ${POSTGRES_DB:-spectra_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - spectra
+
+  # ── Backend API ──────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./platform/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-spectra}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-spectra_platform}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      OLLAMA_API_URL: ${OLLAMA_API_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120000}
+      AI_ANALYSIS_ENABLED: ${AI_ANALYSIS_ENABLED:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - spectra
+
+  # ── Frontend ─────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./platform/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    networks:
+      - spectra
+
+  # ── Python Scanner API ──────────────────────────────────────────
+  scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile.scanner
+    restart: unless-stopped
+    volumes:
+      - scanner_data:/app/data
+      - ./config:/app/config:ro
+      - nuclei_templates:/root/.local/nuclei-templates
+    environment:
+      SPECTRA_API_KEY: ${SPECTRA_API_KEY:-}
+      OLLAMA_API_URL: ${OLLAMA_API_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - spectra
+
+  # ── Ollama (optional — start with: docker compose --profile ai up) ──
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ai"]
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - spectra
+
+volumes:
+  postgres_data:
+  caddy_data:
+  scanner_data:
+  nuclei_templates:
+  ollama_models:
+
+networks:
+  spectra:
+    driver: bridge

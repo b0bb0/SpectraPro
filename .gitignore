@@ -1,0 +1,88 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Environment files (NEVER commit secrets)
+.env
+.env.local
+.env.staging
+platform/backend/.env
+platform/backend/.env.local
+platform/frontend/.env.local
+# NOTE: .env.production is a TEMPLATE with placeholders — safe to commit
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Build outputs
+platform/frontend/.next/
+platform/frontend/out/
+platform/backend/dist/
+*.js.map
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+data/spectra.db
+
+# Logs
+logs/
+*.log
+
+# Scan outputs and reports (may contain sensitive data)
+data/scans/
+data/reports/
+*.html
+!platform/frontend/**/*.html
+
+# Nuclei outputs
+nuclei_report.json
+*_report.html
+*_analysis*.json
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Cache
+.cache/
+.pytest_cache/
+
+# Coverage
+coverage/
+.nyc_output/
+htmlcov/
+
+# Prisma — DO NOT gitignore migrations (needed for prisma migrate deploy)
+# platform/backend/prisma/migrations/
+
+# Data migration exports (instance-specific)
+migration/
+
+# Ollama model data
+ollama_data/
+
+# Cloudflare Tunnel credentials (NEVER commit)
+cloudflared/credentials.json
+
+# Docker volumes
+postgres_data/
+
+# Temporary files
+*.tmp
+*.bak
+*.zip
+trail-of-bits-security/
+trail-of-bits-security.zip
+spectra_scanner.egg-info/

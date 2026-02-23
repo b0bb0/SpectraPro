@@ -1,0 +1,29 @@
+# ── Spectra Platform — Development Docker Compose ───────────────────
+# Only runs PostgreSQL. Frontend & backend run natively for hot-reload.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   cd platform/backend && npm run dev
+#   cd platform/frontend && npm run dev
+# ─────────────────────────────────────────────────────────────────────
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: spectra_platform
+      POSTGRES_USER: spectra
+      POSTGRES_PASSWORD: spectra
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spectra -d spectra_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_dev_data:

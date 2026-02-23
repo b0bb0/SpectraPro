@@ -1,0 +1,23 @@
+# Spectra Multi-Target Scan Configuration
+#
+# Format: One target URL per line
+# Lines starting with # are treated as comments and ignored
+# Empty lines are also ignored
+#
+# Usage:
+#   spectra scan --targets-file targets.txt
+#   spectra scan -f targets.txt --max-workers 5
+#
+# Note: Adjust --max-workers based on your system resources
+#       Default is 3 parallel scans
+#
+
+# Example targets (replace with your actual targets)
+https://example.com
+https://test.example.com
+https://staging.example.com
+
+# You can add as many targets as needed
+# https://api.example.com
+# https://admin.example.com
+# https://subdomain.example.com

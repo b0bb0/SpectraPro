@@ -1,0 +1,48 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+
+    /* Path aliases */
+    "baseUrl": ".",
+    "paths": {
+      "@repo/shared": ["packages/shared/src"],
+      "@repo/shared/*": ["packages/shared/src/*"],
+      "@app/*": ["apps/api/src/*"],
+      "@cti/*": ["apps/cti/src/*"],
+      "@web/*": ["apps/web/src/*"],
+      "@worker/*": ["packages/worker/src/*"]
+    }
+  },
+  "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "packages/**/*.tsx"],
+  "references": [
+    { "path": "./apps/api" },
+    { "path": "./apps/cti" },
+    { "path": "./apps/web" },
+    { "path": "./packages/shared" },
+    { "path": "./packages/worker" }
+  ]
+}

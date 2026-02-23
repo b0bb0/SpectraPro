@@ -1,0 +1,45 @@
+# Spectra - AI Automated Penetration Testing
+# Python Dependencies
+#
+# NOTE: Many pins are loosened to >=minimum to avoid conflicts with
+# scrapegraphai's transitive dependency tree (langchain, boto3, etc.).
+
+# Web Framework
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# HTTP Requests
+requests>=2.32.5
+
+# Configuration
+pyyaml>=6.0.1
+
+# Database
+# SQLite3 is included in Python standard library
+
+# CLI
+argparse  # Included in Python standard library
+
+# Utilities
+python-dateutil>=2.8.2
+tqdm>=4.67.1  # Progress bars for CLI
+
+# Testing
+pytest>=7.4.3
+pytest-cov>=4.1.0
+
+# Code Quality
+black>=23.12.1
+flake8>=7.0.0
+
+# Optional: Web Server for Production
+gunicorn>=21.2.0
+
+# Screenshots
+playwright>=1.57.0  # For taking screenshots of vulnerabilities
+scrapegraphai>=1.73.0
+
+# Optional: Advanced features
+# Uncomment if needed
+# celery==5.3.4  # For async task processing
+# redis==5.0.1   # For caching and task queue

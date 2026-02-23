@@ -1,0 +1,1243 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ai_decision_ledger {
+  id                   String             @id @default(uuid())
+  decisionType         AIDecisionType
+  phase                OrchestrationPhase
+  discoveryContextHash String?
+  endpointMapHash      String?
+  assetCriticality     AssetCriticality?
+  inputSummary         Json?
+  modelName            String
+  modelVersion         String
+  temperature          Float?
+  decisionJson         Json
+  selectedTemplates    String[]           @default([])
+  selectedTags         String[]           @default([])
+  selectedScopes       String[]           @default([])
+  confidenceScore      Float?
+  rationale            String?
+  outcome              AIDecisionOutcome
+  validationErrors     String[]           @default([])
+  templatesValidated   Int                @default(0)
+  templatesRejected    Int                @default(0)
+  fallbackTriggered    Boolean            @default(false)
+  fallbackReason       String?
+  templatesExecuted    Int?
+  findingsGenerated    Int?
+  executionTime        Int?
+  createdAt            DateTime           @default(now())
+  scanId               String
+  tenantId             String
+  scans                scans              @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  tenants              tenants            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([decisionType])
+  @@index([outcome])
+  @@index([scanId])
+  @@index([tenantId])
+}
+
+model assets {
+  id                  String                @id @default(uuid())
+  name                String
+  type                AssetType
+  environment         AssetEnvironment      @default(PRODUCTION)
+  criticality         AssetCriticality      @default(MEDIUM)
+  identifier          String?
+  ipAddress           String?
+  hostname            String?
+  url                 String?
+  description         String?
+  tags                String[]              @default([])
+  owner               String?
+  isActive            Boolean               @default(true)
+  lastScanAt          DateTime?
+  riskScore           Float                 @default(0)
+  vulnCount           Int                   @default(0)
+  criticalVulnCount   Int                   @default(0)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime @updatedAt
+  tenantId            String
+  createdById         String
+  firstSeen           DateTime              @default(now())
+  highVulnCount       Int                   @default(0)
+  infoVulnCount       Int                   @default(0)
+  ipAddresses         String[]              @default([])
+  lastSeen            DateTime              @default(now())
+  lowVulnCount        Int                   @default(0)
+  mediumVulnCount     Int                   @default(0)
+  parentAssetId       String?
+  scanCount           Int                   @default(0)
+  services            String[]              @default([])
+  source              String[]              @default([])
+  createdBy           users                 @relation(fields: [createdById], references: [id])
+  parentAsset         assets?               @relation("assetsToassets", fields: [parentAssetId], references: [id])
+  childAssets         assets[]              @relation("assetsToassets")
+  tenants             tenants               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  endpoint_maps       endpoint_maps[]
+  scans               scans[]
+  vulnerabilities     vulnerabilities[]
+  recon_sessions      recon_sessions[]
+  asset_timeline      asset_timeline[]
+  change_intelligence change_intelligence[]
+
+  @@index([criticality])
+  @@index([environment])
+  @@index([parentAssetId])
+  @@index([riskScore])
+  @@index([tenantId])
+  @@index([type])
+  @@index([identifier])
+}
+
+model audit_logs {
+  id         String      @id @default(uuid())
+  action     AuditAction
+  resource   String
+  resourceId String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+  tenantId   String
+  userId     String?
+  tenants    tenants     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       users?      @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([resource])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model daily_metrics {
+  id             String   @id @default(uuid())
+  date           DateTime @unique
+  totalAssets    Int      @default(0)
+  totalVulns     Int      @default(0)
+  openVulns      Int      @default(0)
+  criticalVulns  Int      @default(0)
+  highVulns      Int      @default(0)
+  mediumVulns    Int      @default(0)
+  lowVulns       Int      @default(0)
+  avgRiskScore   Float    @default(0)
+  maxRiskScore   Float    @default(0)
+  newVulns       Int      @default(0)
+  mitigatedVulns Int      @default(0)
+  scansCompleted Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([date])
+}
+
+model endpoint_maps {
+  id              String         @id @default(uuid())
+  discoveredFrom  String
+  depth           Int            @default(0)
+  path            String
+  fullUrl         String
+  method          EndpointMethod @default(GET)
+  queryParameters String[]       @default([])
+  formParameters  String[]       @default([])
+  jsonKeys        String[]       @default([])
+  headers         Json?
+  isApi           Boolean        @default(false)
+  hasAuth         Boolean        @default(false)
+  hasFileUpload   Boolean        @default(false)
+  contentType     String?
+  statusCode      Int?
+  responseTime    Int?
+  responseSize    Int?
+  discoveredAt    DateTime       @default(now())
+  scanId          String
+  assetId         String?
+  tenantId        String
+  assets          assets?        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  scans           scans          @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  tenants         tenants        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([scanId, fullUrl, method])
+  @@index([assetId])
+  @@index([isApi])
+  @@index([scanId])
+  @@index([tenantId])
+}
+
+model evidence {
+  id              String          @id @default(uuid())
+  vulnerabilityId String
+  type            String
+  description     String?
+  content         String?
+  fileUrl         String?
+  mimeType        String?
+  createdAt       DateTime        @default(now())
+  vulnerabilities vulnerabilities @relation(fields: [vulnerabilityId], references: [id], onDelete: Cascade)
+
+  @@index([vulnerabilityId])
+}
+
+model exposure_scans {
+  id               String             @id @default(uuid())
+  rootDomain       String
+  status           ExposureScanStatus @default(PENDING)
+  progress         Int                @default(0)
+  currentPhase     String?
+  totalSubdomains  Int                @default(0)
+  activeSubdomains Int                @default(0)
+  errorMessage     String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  duration         Int?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime @updatedAt
+  tenantId         String
+  tenants          tenants            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subdomains       subdomains[]
+
+  @@index([createdAt])
+  @@index([rootDomain])
+  @@index([status])
+  @@index([tenantId])
+}
+
+model NucleiTemplate {
+  id              String           @id @default(uuid())
+  name            String
+  description     String?
+  content         String
+  fileName        String
+  author          String?
+  severity        Severity         @default(INFO)
+  category        TemplateCategory @default(CUSTOM)
+  status          TemplateStatus   @default(VALIDATING)
+  tags            String[]
+  reference       String[]
+  cveId           String?
+  cweId           String?
+  isValid         Boolean          @default(false)
+  validatedAt     DateTime?
+  validationError String?
+  usageCount      Int              @default(0)
+  lastUsedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime @updatedAt
+  tenantId        String
+  uploadedById    String
+  tenants         tenants          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  uploadedBy      users            @relation(fields: [uploadedById], references: [id])
+
+  @@unique([tenantId, fileName])
+  @@index([category])
+  @@index([severity])
+  @@index([status])
+  @@index([tenantId])
+  @@index([uploadedById])
+  @@map("nuclei_templates")
+}
+
+model reports {
+  id          String       @id @default(uuid())
+  name        String
+  type        ReportType
+  format      ReportFormat
+  filters     Json?
+  filePath    String?
+  fileSize    Int?
+  generatedAt DateTime     @default(now())
+  expiresAt   DateTime?
+  tenantId    String
+  tenants     tenants      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([generatedAt])
+  @@index([tenantId])
+}
+
+model rules_of_engagement {
+  id                                            String       @id @default(uuid())
+  name                                          String
+  description                                   String?
+  status                                        ROEStatus    @default(DRAFT)
+  scopeDomains                                  String[]     @default([])
+  scopeIPs                                      String[]     @default([])
+  scopeUrls                                     String[]     @default([])
+  excludedTargets                               String[]     @default([])
+  allowedMethods                                ScanMethod[] @default([BASELINE])
+  validationEnabled                             Boolean      @default(false)
+  validationRequiresApproval                    Boolean      @default(true)
+  validationMaxAttempts                         Int          @default(3)
+  validationTimeout                             Int          @default(300)
+  maxRequestsPerSecond                          Int          @default(150)
+  maxConcurrentScans                            Int          @default(3)
+  allowedStartTime                              String?
+  allowedEndTime                                String?
+  allowedDaysOfWeek                             Int[]        @default([1, 2, 3, 4, 5])
+  approvedById                                  String?
+  approvedAt                                    DateTime?
+  validFrom                                     DateTime
+  validUntil                                    DateTime
+  createdAt                                     DateTime     @default(now())
+  updatedAt                                     DateTime @updatedAt
+  tenantId                                      String
+  createdById                                   String
+  users_rules_of_engagement_approvedByIdTousers users?       @relation("rules_of_engagement_approvedByIdTousers", fields: [approvedById], references: [id])
+  users_rules_of_engagement_createdByIdTousers  users        @relation("rules_of_engagement_createdByIdTousers", fields: [createdById], references: [id])
+  tenants                                       tenants      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  scans                                         scans[]
+
+  @@index([status])
+  @@index([tenantId])
+  @@index([validFrom, validUntil])
+}
+
+model scan_controls {
+  id             String              @id @default(uuid())
+  action         ScanControlAction
+  reason         String?
+  executedAt     DateTime            @default(now())
+  executedById   String
+  phaseBefore    OrchestrationPhase?
+  phaseAfter     OrchestrationPhase?
+  progressBefore Int?
+  progressAfter  Int?
+  scanId         String
+  tenantId       String
+  users          users               @relation(fields: [executedById], references: [id])
+  scans          scans               @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  tenants        tenants             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([executedAt])
+  @@index([scanId])
+  @@index([tenantId])
+}
+
+model scans {
+  id                  String                @id @default(uuid())
+  name                String
+  type                ScanType
+  status              ScanStatus            @default(PENDING)
+  targetCount         Int                   @default(0)
+  severity            String[]
+  vulnFound           Int                   @default(0)
+  criticalCount       Int                   @default(0)
+  highCount           Int                   @default(0)
+  mediumCount         Int                   @default(0)
+  lowCount            Int                   @default(0)
+  infoCount           Int                   @default(0)
+  startedAt           DateTime?
+  completedAt         DateTime?
+  duration            Int?
+  scannerVersion      String?
+  templateVersion     String?
+  errorMessage        String?
+  rawOutput           String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime @updatedAt
+  tenantId            String
+  assetId             String?
+  currentPhase        String?
+  progress            Int                   @default(0)
+  templatesRun        Int                   @default(0)
+  templatesTotal      Int                   @default(0)
+  assetContext        Json?
+  orchestrationPhase  OrchestrationPhase?   @default(PREFLIGHT)
+  overallRiskScore    Float?                @default(0)
+  phaseExecutions     Json?
+  scanProfile         ScanProfile?          @default(BALANCED)
+  deepScanAuthorized  Boolean               @default(false)
+  killRequested       Boolean               @default(false)
+  killRequestedAt     DateTime?
+  killRequestedById   String?
+  roeId               String?
+  authConfig          Json?                     // Authentication configuration for authenticated scans
+  ai_decision_ledger  ai_decision_ledger[]
+  endpoint_maps       endpoint_maps[]
+  scan_controls       scan_controls[]
+  assets              assets?               @relation(fields: [assetId], references: [id])
+  users               users?                @relation(fields: [killRequestedById], references: [id])
+  rules_of_engagement rules_of_engagement?  @relation(fields: [roeId], references: [id])
+  tenants             tenants               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vulnerabilities     vulnerabilities[]
+  recon_sessions      recon_sessions[]
+  scan_test_results   scan_test_results[]
+  attack_chains       attack_chains[]
+  change_intelligence change_intelligence[]
+
+  @@index([createdAt])
+  @@index([roeId])
+  @@index([status])
+  @@index([tenantId])
+}
+
+model ScheduledScanExecution {
+  id              String        @id @default(uuid())
+  status          ScanStatus    @default(PENDING)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  duration        Int?
+  scanId          String?
+  vulnFound       Int           @default(0)
+  errorMessage    String?
+  executedAt      DateTime      @default(now())
+  scheduledScanId String
+  scheduledScan   ScheduledScan @relation(fields: [scheduledScanId], references: [id], onDelete: Cascade)
+
+  @@index([executedAt])
+  @@index([scheduledScanId])
+  @@index([status])
+  @@map("scheduled_scan_executions")
+}
+
+model ScheduledScan {
+  id                  String                   @id @default(uuid())
+  name                String
+  description         String?
+  scanType            ScanType                 @default(NUCLEI)
+  scanProfile         ScanProfile?             @default(BALANCED)
+  severity            String[]                 @default(["critical", "high", "medium", "low"])
+  frequency           ScheduleFrequency        @default(DAILY)
+  cronExpression      String?
+  timezone            String                   @default("UTC")
+  startDate           DateTime                 @default(now())
+  endDate             DateTime?
+  nextRunAt           DateTime?
+  lastRunAt           DateTime?
+  assetIds            String[]
+  targetUrls          String[]                 @default([])
+  status              ScheduledScanStatus      @default(ACTIVE)
+  isActive            Boolean                  @default(true)
+  runCount            Int                      @default(0)
+  failCount           Int                      @default(0)
+  notifyOnCompletion  Boolean                  @default(true)
+  notifyOnFailure     Boolean                  @default(true)
+  notifyEmails        String[]                 @default([])
+  authConfig          Json?                                        // Authentication configuration for authenticated scans
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime @updatedAt
+  tenantId            String
+  createdById         String
+  executions          ScheduledScanExecution[]
+  user                users                    @relation(fields: [createdById], references: [id])
+  tenant              tenants                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([createdById])
+  @@index([isActive])
+  @@index([nextRunAt])
+  @@index([status])
+  @@index([tenantId])
+  @@map("scheduled_scans")
+}
+
+model subdomains {
+  id                   String         @id @default(uuid())
+  exposureScanId       String
+  subdomain            String
+  isActive             Boolean        @default(false)
+  protocol             String?
+  ipAddress            String?
+  statusCode           Int?
+  responseTime         Int?
+  screenshotUrl        String?
+  screenshotCapturedAt DateTime?
+  createdAt            DateTime       @default(now())
+  tenantId             String
+  exposure_scans       exposure_scans @relation(fields: [exposureScanId], references: [id], onDelete: Cascade)
+  tenants              tenants        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([exposureScanId])
+  @@index([isActive])
+  @@index([subdomain])
+  @@index([tenantId])
+}
+
+model tenants {
+  id                    String                  @id @default(uuid())
+  name                  String
+  slug                  String                  @unique
+  domain                String?
+  plan                  String                  @default("free")
+  isActive              Boolean                 @default(true)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime @updatedAt
+  ai_decision_ledger    ai_decision_ledger[]
+  assets                assets[]
+  audit_logs            audit_logs[]
+  endpoint_maps         endpoint_maps[]
+  exposure_scans        exposure_scans[]
+  nucleiTemplates       NucleiTemplate[]
+  reports               reports[]
+  rules_of_engagement   rules_of_engagement[]
+  scan_controls         scan_controls[]
+  scans                 scans[]
+  scheduledScans        ScheduledScan[]
+  subdomains            subdomains[]
+  users                 users[]
+  vulnerabilities       vulnerabilities[]
+  recon_sessions        recon_sessions[]
+  recon_findings        recon_findings[]
+  recon_phase_runs      recon_phase_runs[]
+  recon_artifacts       recon_artifacts[]
+  recon_selections      recon_selections[]
+  recon_ai_decisions    recon_ai_decisions[]
+  scan_test_results     scan_test_results[]
+  exploitation_attempts exploitation_attempts[]
+  exploitation_proofs   exploitation_proofs[]
+  impact_assessments    impact_assessments[]
+  attack_chains         attack_chains[]
+  asset_timeline        asset_timeline[]
+  change_intelligence   change_intelligence[]
+  global_kill_switch    global_kill_switch[]
+  tool_integrations     tool_integrations[]
+  integration_records   integration_records[]
+}
+
+model users {
+  id                                                          String                  @id @default(uuid())
+  email                                                       String                  @unique
+  passwordHash                                                String
+  firstName                                                   String
+  lastName                                                    String
+  role                                                        UserRole                @default(VIEWER)
+  isActive                                                    Boolean                 @default(true)
+  lastLoginAt                                                 DateTime?
+  createdAt                                                   DateTime                @default(now())
+  updatedAt                                                   DateTime @updatedAt
+  tenantId                                                    String
+  assets                                                      assets[]
+  audit_logs                                                  audit_logs[]
+  nucleiTemplates                                             NucleiTemplate[]
+  rules_of_engagement_rules_of_engagement_approvedByIdTousers rules_of_engagement[]   @relation("rules_of_engagement_approvedByIdTousers")
+  rules_of_engagement_rules_of_engagement_createdByIdTousers  rules_of_engagement[]   @relation("rules_of_engagement_createdByIdTousers")
+  scan_controls                                               scan_controls[]
+  scans                                                       scans[]
+  scheduledScans                                              ScheduledScan[]
+  tenants                                                     tenants                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vulnerabilities                                             vulnerabilities[]
+  exploitation_attempts_requested                             exploitation_attempts[] @relation("exploitation_attempts_requestedBy")
+  exploitation_attempts_approved                              exploitation_attempts[] @relation("exploitation_attempts_approvedBy")
+  impact_assessments                                          impact_assessments[]
+  global_kill_switch_activated                                global_kill_switch[]    @relation("kill_switch_activated")
+  global_kill_switch_deactivated                              global_kill_switch[]    @relation("kill_switch_deactivated")
+  tool_integrations                                           tool_integrations[]
+
+  @@index([email])
+  @@index([tenantId])
+}
+
+model tool_integrations {
+  id               String                @id @default(uuid())
+  name             String
+  provider         String?
+  type             IntegrationType       @default(HTTP_JSON)
+  endpointUrl      String
+  query            String?
+  authType         IntegrationAuthType   @default(NONE)
+  authValue        String?
+  customHeaderName String?
+  isActive         Boolean               @default(true)
+  lastSyncedAt     DateTime?
+  lastSyncStatus   IntegrationSyncStatus @default(NEVER)
+  lastSyncError    String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  tenantId         String
+  createdById      String
+  tenants          tenants               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users            users                 @relation(fields: [createdById], references: [id])
+  records          integration_records[]
+
+  @@index([tenantId])
+  @@index([isActive])
+  @@index([type])
+}
+
+model integration_records {
+  id             String            @id @default(uuid())
+  integrationId  String
+  tenantId       String
+  externalId     String?
+  title          String?
+  severity       String?
+  status         String?
+  data           Json
+  fetchedAt      DateTime          @default(now())
+  toolIntegration tool_integrations @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  tenants        tenants           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId, fetchedAt])
+  @@index([tenantId, fetchedAt])
+  @@unique([integrationId, externalId])
+}
+
+model vulnerabilities {
+  id                    String                  @id @default(uuid())
+  title                 String
+  description           String
+  severity              Severity
+  cvssScore             Float?
+  cvssVector            String?
+  cveId                 String?
+  cweId                 String?
+  category              String?
+  tags                  String[]
+  status                VulnerabilityStatus     @default(OPEN)
+  statusReason          String?
+  recommendation        String?
+  remediationSteps      String?
+  effort                String?
+  detectionMethod       String?
+  templateId            String?
+  matcher               String?
+  firstSeen             DateTime                @default(now())
+  lastSeen              DateTime                @default(now())
+  mitigatedAt           DateTime?
+  dueDate               DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime @updatedAt
+  tenantId              String
+  assetId               String
+  scanId                String?
+  createdById           String
+  aiAnalysis            String?
+  aiRecommendations     Json?
+  analysisVersion       String?
+  analyzedAt            DateTime?
+  riskScore             Float?
+  curlCommand           String?
+  rawResponse           String?
+  targetUrl             String?
+  affectedParameter     String?
+  deduplicationKey      String?
+  normalizedEndpoint    String?
+  occurrenceCount       Int                     @default(1)
+  evidence              evidence[]
+  assets                assets                  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  users                 users                   @relation(fields: [createdById], references: [id])
+  scans                 scans?                  @relation(fields: [scanId], references: [id])
+  tenants               tenants                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vulnerability_history vulnerability_history[]
+  scan_test_results     scan_test_results[]
+  exploitation_attempts exploitation_attempts[]
+  impact_assessments    impact_assessments?
+
+  @@index([assetId])
+  @@index([cveId])
+  @@index([deduplicationKey])
+  @@index([firstSeen])
+  @@index([severity])
+  @@index([status])
+  @@index([tenantId])
+}
+
+model vulnerability_history {
+  id              String          @id @default(uuid())
+  vulnerabilityId String
+  field           String
+  oldValue        String?
+  newValue        String?
+  changedAt       DateTime        @default(now())
+  changedBy       String
+  vulnerabilities vulnerabilities @relation(fields: [vulnerabilityId], references: [id], onDelete: Cascade)
+
+  @@index([vulnerabilityId])
+}
+
+model recon_sessions {
+  id                String               @id @default(uuid())
+  scanId            String
+  assetId           String
+  status            ScanStatus           @default(PENDING)
+  passiveStatus     ReconStatus          @default(QUEUED)
+  activeStatus      ReconStatus          @default(QUEUED)
+  contentStatus     ReconStatus          @default(QUEUED)
+  techStackStatus   ReconStatus          @default(QUEUED)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  duration          Int?
+  errorMessage      String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime @updatedAt
+  tenantId          String
+  scans             scans                @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  assets            assets               @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  tenants           tenants              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recon_findings    recon_findings[]
+  phase_runs        recon_phase_runs[]
+  artifacts         recon_artifacts[]
+  selection         recon_selections?
+  ai_decisions      recon_ai_decisions[]
+
+  @@index([scanId])
+  @@index([assetId])
+  @@index([tenantId])
+}
+
+model recon_findings {
+  id                String          @id @default(uuid())
+  reconSessionId    String
+  stage             ReconStage
+  findingType       String
+  source            String
+  data              Json
+  confidence        Float?
+  discoveredAt      DateTime        @default(now())
+  tenantId          String
+  recon_sessions    recon_sessions  @relation(fields: [reconSessionId], references: [id], onDelete: Cascade)
+  tenants           tenants         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([reconSessionId])
+  @@index([stage])
+  @@index([tenantId])
+}
+
+model recon_phase_runs {
+  id              String             @id @default(uuid())
+  sessionId       String
+  phase           ReconPhase
+  status          ReconStatus        @default(QUEUED)
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  parameters      Json?
+  processId       Int?
+  errorMessage    String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime @updatedAt
+  tenantId        String
+  session         recon_sessions     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tenants         tenants            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  artifacts       recon_artifacts[]
+
+  @@index([sessionId, phase])
+  @@index([status])
+  @@index([tenantId])
+}
+
+model recon_artifacts {
+  id              String             @id @default(uuid())
+  sessionId       String
+  phaseRunId      String?
+  phase           ReconPhase
+  type            String
+  storagePath     String
+  payload         Json?
+  createdAt       DateTime           @default(now())
+  tenantId        String
+  session         recon_sessions     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  phaseRun        recon_phase_runs?  @relation(fields: [phaseRunId], references: [id], onDelete: Cascade)
+  tenants         tenants            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, phase])
+  @@index([tenantId])
+}
+
+model recon_selections {
+  id                      String          @id @default(uuid())
+  sessionId               String          @unique
+  selectedPorts           Json?
+  selectedServiceUrls     Json?
+  selectedFeroxEndpoints  Json?
+  selectedNucleiTargets   Json?
+  selectedNucleiTags      Json?
+  scopeNotes              String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime @updatedAt
+  tenantId                String
+  session                 recon_sessions  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tenants                 tenants         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model recon_ai_decisions {
+  id                      String          @id @default(uuid())
+  sessionId               String
+  inputSummary            Json
+  modelName               String
+  modelVersion            String
+  temperature             Float?
+  attackSurface           Json
+  candidateAttackPaths    Json
+  recommendedNucleiTags   String[]        @default([])
+  whyNotTested            Json?
+  confidenceScore         Float?
+  createdAt               DateTime        @default(now())
+  tenantId                String
+  session                 recon_sessions  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tenants                 tenants         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([tenantId])
+}
+
+model scan_test_results {
+  id                String                @id @default(uuid())
+  scanId            String
+  vulnerabilityId   String?
+  testName          String
+  testCategory      String
+  layer             String
+  executionStatus   TestExecutionStatus
+  skipReason        String?
+  aiDecisionId      String?
+  result            String?
+  executedAt        DateTime              @default(now())
+  duration          Int?
+  tenantId          String
+  scans             scans                 @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  vulnerabilities   vulnerabilities?      @relation(fields: [vulnerabilityId], references: [id], onDelete: Cascade)
+  tenants           tenants               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([vulnerabilityId])
+  @@index([executionStatus])
+  @@index([layer])
+  @@index([tenantId])
+}
+
+model exploitation_attempts {
+  id                String                @id @default(uuid())
+  vulnerabilityId   String
+  state             ExploitState          @default(NOT_TESTED)
+  technique         ExploitTechnique
+  payload           String?
+  roeChecked        Boolean               @default(false)
+  roeApproved       Boolean               @default(false)
+  roeBlockReason    String?
+  attemptedAt       DateTime?
+  completedAt       DateTime?
+  duration          Int?
+  success           Boolean               @default(false)
+  errorMessage      String?
+  aiRationale       String?
+  aiConfidence      Float?
+  requestedById     String
+  approvedById      String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime @updatedAt
+  tenantId          String
+  vulnerabilities   vulnerabilities       @relation(fields: [vulnerabilityId], references: [id], onDelete: Cascade)
+  users_requested   users                 @relation("exploitation_attempts_requestedBy", fields: [requestedById], references: [id])
+  users_approved    users?                @relation("exploitation_attempts_approvedBy", fields: [approvedById], references: [id])
+  tenants           tenants               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  exploitation_proofs exploitation_proofs[]
+
+  @@index([vulnerabilityId])
+  @@index([state])
+  @@index([tenantId])
+}
+
+model exploitation_proofs {
+  id                    String                  @id @default(uuid())
+  exploitAttemptId      String
+  proofType             String
+  proofData             Json
+  screenshot            String?
+  request               String?
+  response              String?
+  capturedAt            DateTime                @default(now())
+  tenantId              String
+  exploitation_attempts exploitation_attempts   @relation(fields: [exploitAttemptId], references: [id], onDelete: Cascade)
+  tenants               tenants                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([exploitAttemptId])
+  @@index([tenantId])
+}
+
+model impact_assessments {
+  id                        String          @id @default(uuid())
+  vulnerabilityId           String
+  exploitAttemptId          String?
+  privilegeEscalation       Boolean         @default(false)
+  privilegeContext          String?
+  authBypassed              Boolean         @default(false)
+  authBoundaryDescription   String?
+  lateralMovementPossible   Boolean         @default(false)
+  lateralMovementDescription String?
+  dataSensitivityLevel      ImpactLevel     @default(NONE)
+  dataSchemaExposed         String[]        @default([])
+  overallImpactLevel        ImpactLevel
+  impactSummary             String
+  assessedAt                DateTime        @default(now())
+  assessedById              String
+  tenantId                  String
+  vulnerabilities           vulnerabilities @relation(fields: [vulnerabilityId], references: [id], onDelete: Cascade)
+  users                     users           @relation(fields: [assessedById], references: [id])
+  tenants                   tenants         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([vulnerabilityId])
+  @@index([overallImpactLevel])
+  @@index([tenantId])
+}
+
+model attack_chains {
+  id                String              @id @default(uuid())
+  name              String
+  scanId            String
+  reconSessionId    String?
+  vulnerabilityIds  String[]            @default([])
+  exploitAttemptIds String[]            @default([])
+  impactSummary     String?
+  chainCompleted    Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime @updatedAt
+  tenantId          String
+  scans             scans               @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  tenants           tenants             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attack_chain_steps attack_chain_steps[]
+
+  @@index([scanId])
+  @@index([tenantId])
+}
+
+model attack_chain_steps {
+  id              String        @id @default(uuid())
+  attackChainId   String
+  stepNumber      Int
+  stepType        String
+  stepDescription String
+  referenceId     String?
+  stepData        Json?
+  executedAt      DateTime?
+  attack_chains   attack_chains @relation(fields: [attackChainId], references: [id], onDelete: Cascade)
+
+  @@index([attackChainId])
+}
+
+model asset_timeline {
+  id              String    @id @default(uuid())
+  assetId         String
+  eventType       String
+  eventDescription String
+  eventData       Json?
+  severity        Severity?
+  occurredAt      DateTime  @default(now())
+  tenantId        String
+  assets          assets    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  tenants         tenants   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([occurredAt])
+  @@index([eventType])
+  @@index([tenantId])
+}
+
+model change_intelligence {
+  id                String    @id @default(uuid())
+  assetId           String
+  changeType        String
+  oldValue          String?
+  newValue          String?
+  changeDescription String
+  riskDelta         Float     @default(0)
+  detectedAt        DateTime  @default(now())
+  scanId            String?
+  tenantId          String
+  assets            assets    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  scans             scans?    @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  tenants           tenants   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([detectedAt])
+  @@index([changeType])
+  @@index([tenantId])
+}
+
+model global_kill_switch {
+  id              String    @id @default(uuid())
+  active          Boolean   @default(false)
+  reason          String?
+  activatedAt     DateTime?
+  activatedById   String?
+  deactivatedAt   DateTime?
+  deactivatedById String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime @updatedAt
+  tenantId        String
+  users_activated users?    @relation("kill_switch_activated", fields: [activatedById], references: [id])
+  users_deactivated users?  @relation("kill_switch_deactivated", fields: [deactivatedById], references: [id])
+  tenants         tenants   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+enum AIDecisionOutcome {
+  ACCEPTED
+  REJECTED
+  OVERRIDDEN
+  FALLBACK_USED
+}
+
+enum AIDecisionType {
+  TEMPLATE_SELECTION
+  RISK_ASSESSMENT
+  VALIDATION_PRIORITY
+  IMPACT_ANALYSIS
+  REMEDIATION_ADVICE
+}
+
+enum AssetCriticality {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum AssetEnvironment {
+  PRODUCTION
+  STAGING
+  DEVELOPMENT
+  TEST
+}
+
+enum AssetType {
+  DOMAIN
+  IP
+  APPLICATION
+  API
+  CLOUD_RESOURCE
+  NETWORK_DEVICE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  VIEW
+  EXPORT
+}
+
+enum EndpointMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+  OPTIONS
+  HEAD
+  UNKNOWN
+}
+
+enum ExposureScanStatus {
+  PENDING
+  ENUMERATING
+  DETECTING
+  CAPTURING
+  COMPLETED
+  FAILED
+}
+
+enum OrchestrationPhase {
+  PREFLIGHT
+  DISCOVERY
+  TARGETED_SCAN
+  DEEP_SCAN
+  PROCESSING
+  COMPLETED
+  FAILED
+  PASSIVE_SIGNALS
+  BASELINE_HYGIENE
+  CORRELATION
+}
+
+enum ROEStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum ReportFormat {
+  PDF
+  HTML
+  JSON
+  CSV
+}
+
+enum ReportType {
+  EXECUTIVE
+  TECHNICAL
+  COMPLIANCE
+  CUSTOM
+}
+
+enum ScanControlAction {
+  PAUSE
+  RESUME
+  STOP
+  SKIP_PHASE
+}
+
+enum ScanMethod {
+  DISCOVERY_ONLY
+  BASELINE
+  TARGETED
+  VALIDATION
+  FULL_ASSESSMENT
+}
+
+enum ScanProfile {
+  FAST
+  BALANCED
+  DEEP
+}
+
+enum ScanStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ScanType {
+  NUCLEI
+  NESSUS
+  MANUAL
+  API
+}
+
+enum ScheduleFrequency {
+  ONCE
+  HOURLY
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum ScheduledScanStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+  DISABLED
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum TemplateCategory {
+  CVE
+  MISCONFIGURATION
+  EXPOSED_PANEL
+  EXPOSED_SERVICE
+  DEFAULT_CREDENTIALS
+  INFORMATION_DISCLOSURE
+  INJECTION
+  XSS
+  AUTHENTICATION
+  AUTHORIZATION
+  CUSTOM
+}
+
+enum IntegrationType {
+  HTTP_JSON
+  SHODAN
+}
+
+enum IntegrationAuthType {
+  NONE
+  BEARER
+  API_KEY
+}
+
+enum IntegrationSyncStatus {
+  NEVER
+  SUCCESS
+  FAILED
+}
+
+enum TemplateStatus {
+  ACTIVE
+  INACTIVE
+  VALIDATING
+  FAILED
+}
+
+enum UserRole {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum VulnerabilityStatus {
+  OPEN
+  IN_PROGRESS
+  MITIGATED
+  ACCEPTED
+  FALSE_POSITIVE
+  REOPENED
+  CONTROLLED
+}
+
+enum ReconStage {
+  PASSIVE
+  ACTIVE
+  CONTENT_DISCOVERY
+  TECH_STACK
+}
+
+enum ReconStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum ReconPhase {
+  SUBDOMAINS
+  NMAP
+  FEROXBUSTER
+  AI_ANALYSIS
+  NUCLEI
+}
+
+enum ExploitState {
+  NOT_TESTED
+  TESTABLE
+  EXPLOITED
+  BLOCKED_ROE
+  FAILED
+}
+
+enum ExploitTechnique {
+  SQLI_BOOLEAN
+  SQLI_TIME
+  SQLI_UNION
+  SQLI_ERROR
+  XSS_DOM_PROOF
+  XSS_STORED_PROOF
+  RCE_SAFE_COMMAND
+  IDOR_PROOF
+  AUTH_BYPASS_PROOF
+  CUSTOM
+}
+
+enum ImpactLevel {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TestExecutionStatus {
+  EXECUTED
+  SKIPPED
+  FAILED
+}
