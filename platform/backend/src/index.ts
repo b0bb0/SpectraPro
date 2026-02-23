@@ -45,7 +45,7 @@ import debugRoutes from './routes/debug.routes';
 import sourceScannerRoutes from './routes/source-scanner.routes';
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = Number(process.env.PORT) || 5001;
 
 // ============================================================================
 // MIDDLEWARE

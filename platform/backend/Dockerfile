@@ -24,6 +24,9 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Install OpenSSL 3.x (required by Prisma on Alpine 3.23+)
+RUN apk add --no-cache openssl
+
 RUN addgroup --system --gid 1001 spectra \
  && adduser  --system --uid 1001 spectra
 
@@ -43,10 +46,20 @@ RUN apk add --no-cache wget unzip \
  && chmod +x /usr/local/bin/nuclei \
  && apk del wget unzip
 
+# Regenerate Prisma client for the correct OpenSSL version
+RUN npx prisma generate
+
+# Create directories writable by spectra user
+# Services resolve paths relative to cwd (../../data/*, ../frontend/*)
+RUN mkdir -p /app/logs /app/data/source-scans \
+      /data/scans /data/reports /data/custom-templates \
+      /frontend/public/screenshots/exposure \
+ && chown -R spectra:spectra /app/logs /app/data /data /frontend
+
 USER spectra
 EXPOSE 5001
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s \
-  CMD wget -q --spider http://localhost:5001/api/health || exit 1
+  CMD wget -q --spider http://127.0.0.1:5001/health || exit 1
 
 CMD ["node", "dist/index.js"]
