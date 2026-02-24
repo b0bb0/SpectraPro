@@ -16,7 +16,6 @@ from typing import List, Dict, Optional
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.scanner import NucleiScanner
-from core.scanner import JSSecretScanner
 from core.analyzer import AIAnalyzer
 from core.reporter import ReportGenerator
 from core.database import Database
@@ -47,9 +46,11 @@ class SpectraCLI:
         self._secret_scanner = None
         self._project_root = project_root
 
-    def _get_secret_scanner(self) -> JSSecretScanner:
-        """Lazily initialize the JS secret scanner (requires TruffleHog installed)"""
+    def _get_secret_scanner(self):
+        """Lazily initialize the JS secret scanner (requires TruffleHog + bs4 installed)"""
         if self._secret_scanner is None:
+            from core.scanner import get_js_secret_scanner
+            JSSecretScanner = get_js_secret_scanner()
             self._secret_scanner = JSSecretScanner(
                 output_dir=os.path.join(self._project_root, "data/scans")
             )
