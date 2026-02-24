@@ -75,6 +75,8 @@ app.use(helmet({
 // CORS
 const allowedOrigins: string[] = [
   process.env.FRONTEND_URL,
+  // Extra origins from env (comma-separated, e.g. "http://spectrapro.ai,http://other.com")
+  ...(process.env.CORS_ORIGINS?.split(',').map(s => s.trim()) || []),
   // Localhost origins (always allowed — needed for local MacBook deployment)
   'http://localhost:3000',
   'http://localhost:3001',
