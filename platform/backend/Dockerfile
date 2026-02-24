@@ -1,6 +1,14 @@
 # ── SpectraPRO Backend — Multi-stage Docker Build ─────────────────
-# Produces a lean production image with compiled TS + Prisma + Nuclei
+# Produces a lean production image with compiled TS + Prisma
+# + recon tools (Nuclei, Nmap, Feroxbuster, Sublist3r)
 # ──────────────────────────────────────────────────────────────────
+
+# ── Stage 0: Build Feroxbuster from source (Rust on Alpine/musl) ──
+FROM rust:1-alpine AS ferox-builder
+RUN apk add --no-cache musl-dev openssl-dev openssl-libs-static pkgconfig perl make
+ENV OPENSSL_NO_VENDOR=1
+RUN cargo install feroxbuster --locked
+# Binary lands at /usr/local/cargo/bin/feroxbuster
 
 # ── Stage 1: Install deps + generate Prisma client ───────────────
 FROM node:20-alpine AS deps
@@ -24,8 +32,11 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Install OpenSSL 3.x (required by Prisma on Alpine 3.23+)
-RUN apk add --no-cache openssl
+# Install system deps: OpenSSL (Prisma), Nmap (recon), Python + pip (Sublist3r)
+RUN apk add --no-cache openssl nmap python3 py3-pip
+
+# Install Sublist3r (subdomain enumeration — used by recon + exposure services)
+RUN pip3 install --no-cache-dir --break-system-packages sublist3r
 
 RUN addgroup --system --gid 1001 spectra \
  && adduser  --system --uid 1001 spectra
@@ -36,7 +47,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma     ./prisma
 COPY --from=builder /app/package.json ./
 
-# Install Nuclei scanner binary
+# Install Nuclei binary (Go — static, no glibc issues)
 RUN apk add --no-cache wget unzip \
  && NUCLEI_VERSION=$(wget -qO- https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep tag_name | cut -d'"' -f4 | tr -d v) \
  && ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') \
@@ -44,7 +55,10 @@ RUN apk add --no-cache wget unzip \
  && unzip /tmp/nuclei.zip -d /usr/local/bin/ \
  && rm /tmp/nuclei.zip \
  && chmod +x /usr/local/bin/nuclei \
- && apk del wget unzip
+ && apk del unzip
+
+# Copy Feroxbuster (Rust — compiled from source against musl in Stage 0)
+COPY --from=ferox-builder /usr/local/cargo/bin/feroxbuster /usr/local/bin/feroxbuster
 
 # Regenerate Prisma client for the correct OpenSSL version
 RUN npx prisma generate

@@ -30,11 +30,16 @@ echo ""
 echo -e "${CYAN}[Containers]${NC}"
 
 EXPECTED_SERVICES=("postgres" "backend" "frontend" "caddy" "scanner")
+# Services without a HEALTHCHECK directive — "Up" without "(healthy)" is normal
+NO_HEALTHCHECK=("caddy")
+
 for svc in "${EXPECTED_SERVICES[@]}"; do
   STATUS=$(docker compose ps "$svc" --format '{{.Status}}' 2>/dev/null || echo "not found")
   if echo "$STATUS" | grep -qi "up"; then
     if echo "$STATUS" | grep -qi "healthy"; then
       check_pass "$svc — running (healthy)"
+    elif printf '%s\n' "${NO_HEALTHCHECK[@]}" | grep -qx "$svc"; then
+      check_pass "$svc — running"
     else
       check_warn "$svc — running (not yet healthy)"
     fi
@@ -75,10 +80,10 @@ fi
 echo ""
 echo -e "${CYAN}[Database Row Counts]${NC}"
 
-TABLES=("Tenant" "User" "Asset" "Scan" "Vulnerability")
+TABLES=("tenants" "users" "assets" "scans" "vulnerabilities")
 for tbl in "${TABLES[@]}"; do
   COUNT=$(docker compose exec -T postgres psql -U spectra -d spectra_platform -t -c \
-    "SELECT COUNT(*) FROM \"$tbl\";" 2>/dev/null | tr -d ' ' || echo "?")
+    "SELECT COUNT(*) FROM ${tbl};" 2>/dev/null | tr -d ' ' || echo "?")
   if [ "$COUNT" != "?" ] && [ "$COUNT" -gt 0 ] 2>/dev/null; then
     check_pass "$tbl — $COUNT rows"
   elif [ "$COUNT" = "0" ]; then
@@ -93,12 +98,12 @@ echo ""
 # ── 3. Service Endpoints ────────────────────────────────────────
 echo -e "${CYAN}[Service Endpoints]${NC}"
 
-# Backend health
-BACKEND_HEALTH=$(curl -sf http://localhost/api/health 2>/dev/null || echo "")
-if echo "$BACKEND_HEALTH" | grep -q "healthy"; then
-  check_pass "Backend  — http://localhost/api/health"
+# Backend health (route is /health, Caddy proxies it)
+BACKEND_HEALTH=$(curl -sf http://localhost/health 2>/dev/null || echo "")
+if echo "$BACKEND_HEALTH" | grep -q "ok"; then
+  check_pass "Backend  — http://localhost/health"
 else
-  check_fail "Backend  — http://localhost/api/health not responding"
+  check_fail "Backend  — http://localhost/health not responding"
 fi
 
 # Frontend
