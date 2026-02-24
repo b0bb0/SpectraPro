@@ -16,6 +16,7 @@ from typing import List, Dict, Optional
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from core.scanner import NucleiScanner
+from core.scanner import JSSecretScanner
 from core.analyzer import AIAnalyzer
 from core.reporter import ReportGenerator
 from core.database import Database
@@ -42,7 +43,19 @@ class SpectraCLI:
         self.reporter = ReportGenerator(output_dir=os.path.join(project_root, "data/reports"))
         self.db = Database(db_path=os.path.join(project_root, "data/spectra.db"))
 
-    def run_full_scan(self, target, severity=None, output_format='html'):
+        # Secret scanner is initialized lazily when --secret-scan is used
+        self._secret_scanner = None
+        self._project_root = project_root
+
+    def _get_secret_scanner(self) -> JSSecretScanner:
+        """Lazily initialize the JS secret scanner (requires TruffleHog installed)"""
+        if self._secret_scanner is None:
+            self._secret_scanner = JSSecretScanner(
+                output_dir=os.path.join(self._project_root, "data/scans")
+            )
+        return self._secret_scanner
+
+    def run_full_scan(self, target, severity=None, output_format='html', secret_scan=False):
         """
         Run complete penetration test workflow
 
@@ -50,15 +63,20 @@ class SpectraCLI:
             target: Target URL
             severity: Filter by severity
             output_format: Report format (html, json, markdown)
+            secret_scan: Also scan website JS files for leaked secrets via TruffleHog
         """
+        total_steps = 5 if secret_scan else 4
+
         print(f"\n{'='*60}")
         print(f"  SPECTRA - AI Automated Penetration Testing")
         print(f"{'='*60}\n")
         print(f"Target: {target}")
+        if secret_scan:
+            print(f"Mode:   Vulnerability + JS Secret Scan (TruffleHog)")
         print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-        # Step 1: Scan
-        print("[1/4] Running Nuclei vulnerability scan...")
+        # Step 1: Nuclei Scan
+        print(f"[1/{total_steps}] Running Nuclei vulnerability scan...")
         scan_results = self.scanner.scan_target(
             target=target,
             severity=severity
@@ -73,8 +91,34 @@ class SpectraCLI:
         # Save to database
         self.db.save_scan(scan_results)
 
-        # Step 2: AI Analysis
-        print("\n[2/4] Analyzing vulnerabilities with AI...")
+        # Step 1b: JS Secret Scan (optional)
+        secret_results = None
+        if secret_scan:
+            step = 2
+            print(f"\n[{step}/{total_steps}] Scanning website source & JS files for secrets (TruffleHog)...")
+            try:
+                secret_scanner = self._get_secret_scanner()
+                secret_results = secret_scanner.scan_target(target)
+
+                if secret_results['status'] == 'completed':
+                    js_count = secret_results.get('js_files_scanned', 0)
+                    secrets_found = secret_results['vulnerabilities_found']
+                    print(f"✓ Secret scan completed - {js_count} files scanned, {secrets_found} secrets found")
+
+                    # Merge secret findings into the main scan results
+                    scan_results['results'].extend(secret_results.get('results', []))
+                    scan_results['vulnerabilities_found'] += secrets_found
+
+                    # Save the secret scan separately too
+                    self.db.save_scan(secret_results)
+                else:
+                    print(f"⚠ Secret scan issue: {secret_results.get('error', 'Unknown')}")
+            except RuntimeError as e:
+                print(f"⚠ Secret scan skipped: {e}")
+
+        # Step 2/3: AI Analysis
+        analysis_step = 3 if secret_scan else 2
+        print(f"\n[{analysis_step}/{total_steps}] Analyzing vulnerabilities with AI...")
         analysis = self.analyzer.analyze_vulnerabilities(
             scan_results['results'],
             target
@@ -85,8 +129,9 @@ class SpectraCLI:
         # Save analysis
         self.db.save_analysis(scan_results['scan_id'], analysis)
 
-        # Step 3: Generate Report
-        print(f"\n[3/4] Generating {output_format.upper()} report...")
+        # Step 3/4: Generate Report
+        report_step = 4 if secret_scan else 3
+        print(f"\n[{report_step}/{total_steps}] Generating {output_format.upper()} report...")
         report = self.reporter.generate_report(
             scan_results,
             analysis,
@@ -98,8 +143,9 @@ class SpectraCLI:
         # Save report metadata
         self.db.save_report(report, scan_results['scan_id'])
 
-        # Step 4: Display Summary
-        print(f"\n[4/4] Scan Summary")
+        # Step 4/5: Display Summary
+        summary_step = 5 if secret_scan else 4
+        print(f"\n[{summary_step}/{total_steps}] Scan Summary")
         print(f"{'='*60}")
         print(f"Scan ID: {scan_results['scan_id']}")
         print(f"Risk Score: {analysis['risk_score']}/100")
@@ -114,6 +160,11 @@ class SpectraCLI:
             print(f"  Low:      {by_severity['low']}")
             print(f"  Info:     {by_severity['info']}")
 
+            # Show secret-specific summary when applicable
+            if secret_results and secret_results.get('vulnerabilities_found', 0) > 0:
+                secret_count = secret_results['vulnerabilities_found']
+                print(f"\n  Leaked Secrets: {secret_count} (included above)")
+
             print(f"\nTop Recommendations:")
             for i, rec in enumerate(analysis.get('recommendations', [])[:3], 1):
                 print(f"  {i}. [{rec['severity'].upper()}] {rec['vulnerability']}")
@@ -125,7 +176,7 @@ class SpectraCLI:
         print(f"Report: {report['file_path']}")
         print(f"{'='*60}\n")
 
-    def run_batch_scan(self, targets: List[str], severity=None, output_format='html', max_workers=3):
+    def run_batch_scan(self, targets: List[str], severity=None, output_format='html', max_workers=3, secret_scan=False):
         """
         Run vulnerability scans on multiple targets in parallel
 
@@ -134,11 +185,14 @@ class SpectraCLI:
             severity: Filter by severity
             output_format: Report format (html, json, markdown)
             max_workers: Maximum number of parallel scans (default: 3)
+            secret_scan: Also scan website JS files for leaked secrets via TruffleHog
         """
         print(f"\n{'='*60}")
         print(f"  SPECTRA - Batch Scanning Mode")
         print(f"{'='*60}\n")
         print(f"Targets: {len(targets)}")
+        if secret_scan:
+            print(f"Mode: Vulnerability + JS Secret Scan (TruffleHog)")
         print(f"Max Parallel Scans: {max_workers}")
         print(f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
@@ -149,12 +203,20 @@ class SpectraCLI:
             'scans': []
         }
 
+        # Pre-init secret scanner if needed so threads can share it
+        if secret_scan:
+            try:
+                self._get_secret_scanner()
+            except RuntimeError as e:
+                print(f"⚠ TruffleHog not available, skipping secret scans: {e}")
+                secret_scan = False
+
         def scan_single_target(target: str, index: int) -> Dict:
             """Scan a single target and return results"""
             try:
                 print(f"\n[{index + 1}/{len(targets)}] Starting scan: {target}")
 
-                # Run scan
+                # Run Nuclei scan
                 scan_results = self.scanner.scan_target(
                     target=target,
                     severity=severity
@@ -166,6 +228,19 @@ class SpectraCLI:
 
                 # Save to database
                 self.db.save_scan(scan_results)
+
+                # Run JS secret scan if enabled
+                secrets_found = 0
+                if secret_scan:
+                    try:
+                        secret_results = self._get_secret_scanner().scan_target(target)
+                        if secret_results['status'] == 'completed':
+                            secrets_found = secret_results['vulnerabilities_found']
+                            scan_results['results'].extend(secret_results.get('results', []))
+                            scan_results['vulnerabilities_found'] += secrets_found
+                            self.db.save_scan(secret_results)
+                    except Exception as e:
+                        logger.warning(f"Secret scan failed for {target}: {e}")
 
                 # AI Analysis
                 analysis = self.analyzer.analyze_vulnerabilities(
@@ -186,13 +261,17 @@ class SpectraCLI:
                 # Save report metadata
                 self.db.save_report(report, scan_results['scan_id'])
 
-                print(f"  ✓ [{index + 1}/{len(targets)}] Completed: {target} - {scan_results['vulnerabilities_found']} vulnerabilities")
+                vuln_msg = f"{scan_results['vulnerabilities_found']} vulnerabilities"
+                if secrets_found:
+                    vuln_msg += f" ({secrets_found} secrets)"
+                print(f"  ✓ [{index + 1}/{len(targets)}] Completed: {target} - {vuln_msg}")
 
                 return {
                     'target': target,
                     'status': 'completed',
                     'scan_id': scan_results['scan_id'],
                     'vulnerabilities_found': scan_results['vulnerabilities_found'],
+                    'secrets_found': secrets_found,
                     'risk_score': analysis['risk_score'],
                     'report_path': report['file_path']
                 }
@@ -342,10 +421,15 @@ Examples:
   spectra scan https://example.com --severity critical high
   spectra scan https://example.com --format markdown
 
+  # Scan with JS secret detection (TruffleHog)
+  spectra scan https://example.com --secret-scan
+  spectra scan https://example.com --secret-scan --format json
+
   # Multi-target batch scan
   spectra scan --targets-file targets.txt
   spectra scan -f targets.txt --max-workers 5
   spectra scan -f targets.txt --severity critical --format json
+  spectra scan -f targets.txt --secret-scan
 
   # List and view scans
   spectra list
@@ -385,6 +469,12 @@ Examples:
         choices=['html', 'json', 'markdown'],
         default='html',
         help='Report format (default: html)'
+    )
+    scan_parser.add_argument(
+        '--secret-scan',
+        action='store_true',
+        default=False,
+        help='Scan website source and loaded JS files for leaked secrets using TruffleHog'
     )
 
     # List command
@@ -427,14 +517,16 @@ Examples:
                     targets=targets,
                     severity=args.severity,
                     output_format=args.format,
-                    max_workers=args.max_workers
+                    max_workers=args.max_workers,
+                    secret_scan=args.secret_scan
                 )
             # Single target mode
             else:
                 cli.run_full_scan(
                     target=args.target,
                     severity=args.severity,
-                    output_format=args.format
+                    output_format=args.format,
+                    secret_scan=args.secret_scan
                 )
         elif args.command == 'list':
             cli.list_scans(limit=args.limit)

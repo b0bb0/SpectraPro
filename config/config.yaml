@@ -8,6 +8,14 @@ scanner:
   timeout: 3600  # Scan timeout in seconds
   update_templates_on_start: false
 
+# JS Secret Scanner Settings (TruffleHog)
+secret_scanner:
+  enabled: true
+  output_dir: "data/scans"
+  timeout: 1800  # TruffleHog scan timeout in seconds
+  # Request timeout for fetching JS files from target
+  fetch_timeout: 15
+
 # AI Analyzer Settings
 analyzer:
   llama_api_url: "http://localhost:11434/api/generate"

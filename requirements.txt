@@ -39,6 +39,9 @@ gunicorn>=21.2.0
 playwright>=1.57.0  # For taking screenshots of vulnerabilities
 scrapegraphai>=1.73.0
 
+# JS Secret Scanning
+beautifulsoup4>=4.12.0  # HTML parsing for JS file extraction
+
 # Optional: Advanced features
 # Uncomment if needed
 # celery==5.3.4  # For async task processing

@@ -6,8 +6,10 @@
 
 import { logger } from '../utils/logger';
 import { randomUUID } from 'crypto';
+import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -269,6 +271,22 @@ export class SourceScannerService {
     scan.findings.push(...regexFindings);
     persistScan(scan); // persist after regex scan
 
+    // ── Phase 2b: TruffleHog filesystem scan ────────────────────────
+    try {
+      const trufflehogFindings = await this.runTrufflehogScan(allJsSources, inlineScripts, target.url);
+      // Deduplicate against regex findings
+      for (const f of trufflehogFindings) {
+        const isDupe = scan.findings.some(
+          (existing) => existing.value === f.value && existing.sourceUrl === f.sourceUrl
+        );
+        if (!isDupe) scan.findings.push(f);
+      }
+      logger.info(`[SourceScanner] TruffleHog found ${trufflehogFindings.length} secrets (${trufflehogFindings.length - scan.findings.length + regexFindings.length + trufflehogFindings.length} after dedup)`);
+      persistScan(scan);
+    } catch (err: any) {
+      logger.warn(`[SourceScanner] TruffleHog scan skipped: ${err.message}`);
+    }
+
     // ── Phase 3: Ollama deep analysis ──────────────────────────────────
     // Send JS in chunks to Ollama for semantic analysis
     const allChunks = this.buildChunks(allJsSources, inlineScripts);
@@ -508,6 +526,129 @@ export class SourceScannerService {
     } finally {
       clearTimeout(tid);
     }
+  }
+
+  // ── TruffleHog integration ─────────────────────────────────────────────
+
+  /**
+   * Write collected JS to a temp directory, run `trufflehog filesystem`, parse results.
+   */
+  private async runTrufflehogScan(
+    externalJS: Map<string, string>,
+    inlineScripts: Array<{ pageUrl: string; content: string }>,
+    targetUrl: string,
+  ): Promise<SecretFinding[]> {
+    // Check if trufflehog is installed
+    const trufflehogPath = await this.findTrufflehog();
+    if (!trufflehogPath) {
+      logger.info('[SourceScanner] TruffleHog not installed — skipping filesystem secret scan');
+      return [];
+    }
+
+    // Write JS files to a temp directory
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spectra-th-'));
+    const fileMap = new Map<string, string>(); // localPath → sourceUrl
+
+    try {
+      let fileIdx = 0;
+      for (const [url, content] of externalJS) {
+        const safeName = `ext_${fileIdx++}_${url.split('/').pop()?.replace(/[^a-zA-Z0-9._-]/g, '_') || 'script.js'}`;
+        const filePath = path.join(tmpDir, safeName);
+        fs.writeFileSync(filePath, content, 'utf-8');
+        fileMap.set(filePath, url);
+      }
+      for (let i = 0; i < inlineScripts.length; i++) {
+        const filePath = path.join(tmpDir, `inline_${i}.js`);
+        fs.writeFileSync(filePath, inlineScripts[i].content, 'utf-8');
+        fileMap.set(filePath, `${inlineScripts[i].pageUrl}#inline-${i}`);
+      }
+
+      // Run TruffleHog
+      const output = await new Promise<string>((resolve, reject) => {
+        execFile(
+          trufflehogPath,
+          ['filesystem', tmpDir, '--json', '--no-update'],
+          { timeout: 120_000, maxBuffer: 10 * 1024 * 1024 },
+          (err, stdout, stderr) => {
+            if (stderr) logger.debug(`[SourceScanner] TruffleHog stderr: ${stderr.substring(0, 300)}`);
+            // TruffleHog exits 0 on success even with findings
+            if (err && !stdout) return reject(err);
+            resolve(stdout || '');
+          },
+        );
+      });
+
+      // Parse JSONL output
+      const findings: SecretFinding[] = [];
+      for (const line of output.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const raw = JSON.parse(line);
+          const detectorName: string = raw.DetectorName || raw.detectorName || 'Unknown';
+          const rawValue: string = raw.Raw || raw.raw || '';
+          const verified: boolean = raw.Verified || raw.verified || false;
+          const sourceMeta = raw.SourceMetadata || raw.sourceMetadata || {};
+          const fileData = sourceMeta.Data || sourceMeta.data || {};
+          const fsData = fileData.Filesystem || fileData.filesystem || {};
+          const localFile: string = fsData.file || '';
+          const lineNum: number = fsData.line || 0;
+
+          // Map local path back to original URL
+          const sourceUrl = fileMap.get(localFile) || targetUrl;
+
+          findings.push({
+            id: randomUUID(),
+            severity: this.classifyTrufflehogSeverity(detectorName, verified),
+            type: detectorName.toUpperCase(),
+            value: rawValue,
+            context: `Detected by TruffleHog (${verified ? 'verified' : 'unverified'})`,
+            sourceUrl,
+            line: lineNum || undefined,
+            recommendation: `Rotate this ${detectorName} credential immediately. Remove it from client-side code and store in a server-side secrets manager.`,
+          });
+        } catch {
+          // skip unparseable lines
+        }
+      }
+
+      logger.info(`[SourceScanner] TruffleHog raw output: ${findings.length} findings from ${fileMap.size} files`);
+      return findings;
+    } finally {
+      // Cleanup temp directory
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+    }
+  }
+
+  /**
+   * Locate the trufflehog binary, return path or null if not installed.
+   */
+  private findTrufflehog(): Promise<string | null> {
+    return new Promise((resolve) => {
+      execFile('which', ['trufflehog'], (err, stdout) => {
+        if (err || !stdout.trim()) {
+          resolve(null);
+        } else {
+          resolve(stdout.trim());
+        }
+      });
+    });
+  }
+
+  /**
+   * Map TruffleHog detector names to severity levels.
+   */
+  private classifyTrufflehogSeverity(detector: string, verified: boolean): SecretFinding['severity'] {
+    const d = detector.toLowerCase();
+    const criticalDetectors = ['aws', 'github', 'gitlab', 'gcp', 'azure', 'stripe', 'privatekey', 'sendgrid'];
+    const highDetectors = ['slack', 'twilio', 'mailgun', 'heroku', 'digitalocean', 'npm', 'pypi', 'docker', 'jdbc', 'firebase'];
+
+    for (const key of criticalDetectors) {
+      if (d.includes(key)) return verified ? 'critical' : 'high';
+    }
+    for (const key of highDetectors) {
+      if (d.includes(key)) return verified ? 'high' : 'medium';
+    }
+    return verified ? 'medium' : 'low';
   }
 
   // ── Helper methods ─────────────────────────────────────────────────────

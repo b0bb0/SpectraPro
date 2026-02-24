@@ -197,7 +197,7 @@ export default function SourceScannerPage() {
           </div>
           <div>
             <h1 style={{ ...S.mono, fontSize: 20, fontWeight: 700, color: '#e2dff4', margin: 0 }}>Source Code Scanner</h1>
-            <p style={{ ...S.mono, fontSize: 11, color: '#4a3d6a', margin: 0 }}>Crawl → Extract JS → Detect Secrets with Ollama LLM</p>
+            <p style={{ ...S.mono, fontSize: 11, color: '#4a3d6a', margin: 0 }}>Crawl → Extract JS → TruffleHog + Regex + Ollama LLM Secret Detection</p>
           </div>
         </div>
         {currentScan && (
@@ -646,6 +646,7 @@ export default function SourceScannerPage() {
             Use the custom AI prompt to tell the LLM exactly what to look for.
           </p>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 24, ...S.mono, fontSize: 10, color: '#4a3d6a' }}>
+            <span>🐷 TruffleHog Secrets</span>
             <span>🔍 20+ Regex Patterns</span>
             <span>🧠 Ollama Deep Analysis</span>
             <span>📄 Inline + External JS</span>
