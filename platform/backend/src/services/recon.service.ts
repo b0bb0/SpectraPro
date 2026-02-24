@@ -1454,6 +1454,12 @@ export class ReconService {
     try {
       logger.info(`Starting subdomain enumeration for ${target}`);
 
+      // Check if Sublist3r is installed before attempting enumeration
+      const isInstalled = await subdomainEnumerationService.checkSublist3rInstalled();
+      if (!isInstalled) {
+        throw new Error('Sublist3r is not installed. Please install with: pip3 install sublist3r');
+      }
+
       // Extract root domain from target (strip subdomain, protocol, path, port)
       const domain = this.extractRootDomain(target);
       logger.info(`Extracted root domain: ${domain} from target: ${target}`);

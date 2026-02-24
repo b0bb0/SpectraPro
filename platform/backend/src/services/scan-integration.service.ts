@@ -82,7 +82,7 @@ class ScanIntegrationService {
       }
 
       // Execute discovery and get asset context
-      const assetContext = await scanOrchestratorService['executeDiscoveryPhase'](
+      const assetContext = await scanOrchestratorService.executeDiscoveryPhase(
         scanId,
         target,
         discoveryConfig
@@ -107,7 +107,7 @@ class ScanIntegrationService {
 
       const passiveConfig = plan.phases.find(p => p.phase === ScanPhase.PASSIVE_SIGNALS);
       if (passiveConfig) {
-        const passiveFindings = await scanOrchestratorService['executePassiveSignalsPhase'](
+        const passiveFindings = await scanOrchestratorService.executePassiveSignalsPhase(
           scanId,
           target,
           passiveConfig
@@ -121,7 +121,7 @@ class ScanIntegrationService {
 
       const targetedConfig = plan.phases.find(p => p.phase === ScanPhase.TARGETED_SCAN);
       if (targetedConfig) {
-        const findings = await scanOrchestratorService['executeTargetedPhase'](
+        const findings = await scanOrchestratorService.executeTargetedPhase(
           scanId,
           target,
           assetContext,
@@ -137,7 +137,7 @@ class ScanIntegrationService {
         consoleService.appendOutput(scanId, '\n[BASELINE HYGIENE] Running deterministic security checks...');
         await this.executePhase(scanId, target, ScanPhase.BASELINE_HYGIENE, 'Checking security hygiene');
 
-        const baselineFindings = await scanOrchestratorService['executeBaselineHygienePhase'](
+        const baselineFindings = await scanOrchestratorService.executeBaselineHygienePhase(
           scanId,
           target,
           baselineConfig
@@ -165,7 +165,7 @@ class ScanIntegrationService {
       consoleService.appendOutput(scanId, '\n[CORRELATION] Deduplicating and scoring findings...');
       await this.executePhase(scanId, target, ScanPhase.CORRELATION, 'Correlating findings');
 
-      await scanOrchestratorService['executeCorrelationPhase'](scanId, tenantId);
+      await scanOrchestratorService.executeCorrelationPhase(scanId, tenantId);
 
       // Parse and store results
       await this.processResults(scanId, tenantId, assetId);

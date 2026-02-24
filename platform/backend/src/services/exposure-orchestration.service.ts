@@ -73,6 +73,15 @@ class ExposureOrchestrationService {
     try {
       // Phase 1: Subdomain Enumeration
       logger.info(`[EXPOSURE ${scanId}] Phase 1: Enumeration`);
+
+      // Check if Sublist3r is installed before attempting enumeration
+      const isSublist3rInstalled = await subdomainEnumerationService.checkSublist3rInstalled();
+      if (!isSublist3rInstalled) {
+        const errorMsg = 'Sublist3r is not installed. Please install with: pip3 install sublist3r';
+        logger.error(`[EXPOSURE ${scanId}] ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+
       await this.updateScanStatus(scanId, 'ENUMERATING', null, 10, 'Enumerating subdomains');
 
       const enumeration = await subdomainEnumerationService.enumerateSubdomains(domain, scanId);

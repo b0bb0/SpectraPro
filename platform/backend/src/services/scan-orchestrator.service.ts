@@ -466,7 +466,7 @@ class ScanOrchestratorService {
    * Execute Discovery Phase
    * Run lightweight fingerprinting templates
    */
-  private async executeDiscoveryPhase(
+  public async executeDiscoveryPhase(
     scanId: string,
     target: string,
     config: PhaseConfig
@@ -615,7 +615,7 @@ class ScanOrchestratorService {
    * Execute Targeted Scan Phase
    * Run context-aware vulnerability checks using AI-generated intent
    */
-  private async executeTargetedPhase(
+  public async executeTargetedPhase(
     scanId: string,
     target: string,
     context: AssetContext,
@@ -747,7 +747,7 @@ class ScanOrchestratorService {
    * Deterministic exposure detection with info/low severity only
    * No AI, no aggressive testing - pure signal collection
    */
-  private async executePassiveSignalsPhase(
+  public async executePassiveSignalsPhase(
     scanId: string,
     target: string,
     config: PhaseConfig
@@ -797,7 +797,7 @@ class ScanOrchestratorService {
    * Deterministic security hygiene checks
    * No AI - comprehensive baseline coverage
    */
-  private async executeBaselineHygienePhase(
+  public async executeBaselineHygienePhase(
     scanId: string,
     target: string,
     config: PhaseConfig
@@ -853,7 +853,7 @@ class ScanOrchestratorService {
    * Deduplication, grouping, and risk scoring
    * Mandatory for all scan profiles
    */
-  private async executeCorrelationPhase(
+  public async executeCorrelationPhase(
     scanId: string,
     tenantId: string
   ): Promise<void> {

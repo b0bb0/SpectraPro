@@ -1,0 +1,6 @@
+# Temporary override for test deployment — maps Caddy to port 3005
+# Remove this file for production (which uses port 80)
+services:
+  caddy:
+    ports:
+      - "3005:80"

@@ -86,11 +86,24 @@ export function errorHandler(
   }
 
   // Default error response
+  // Include the error message for known operational errors (tool not installed, etc.)
+  // so users get actionable feedback instead of a generic message
+  const isOperationalError = err.message && (
+    err.message.includes('not installed') ||
+    err.message.includes('not found') ||
+    err.message.includes('not configured') ||
+    err.message.includes('execution failed') ||
+    err.message.includes('timed out') ||
+    err.message.includes('rate limit') ||
+    err.message.includes('invalid') ||
+    err.message.includes('unauthorized')
+  );
+
   res.status(500).json({
     success: false,
     error: {
       code: 'INTERNAL_ERROR',
-      message: 'An unexpected error occurred',
+      message: isOperationalError ? err.message : 'An unexpected error occurred',
       ...(process.env.NODE_ENV === 'development' && { details: err.message }),
     },
   });
