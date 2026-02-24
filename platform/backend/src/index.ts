@@ -43,6 +43,8 @@ import attackChainRoutes from './routes/attack-chain.routes';
 import killSwitchRoutes from './routes/kill-switch.routes';
 import debugRoutes from './routes/debug.routes';
 import sourceScannerRoutes from './routes/source-scanner.routes';
+import aiLedgerRoutes from './routes/ai-ledger.routes';
+import roeRoutes from './routes/roe.routes';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5001;
@@ -149,6 +151,8 @@ app.use('/api/attack-chains', attackChainRoutes);
 app.use('/api/kill-switch', killSwitchRoutes);
 app.use('/api/debug', debugRoutes);
 app.use('/api/source-scanner', sourceScannerRoutes);
+app.use('/api/ai-ledger', aiLedgerRoutes);
+app.use('/api/roe', roeRoutes);
 
 // 404 handler
 app.use((req, res) => {
