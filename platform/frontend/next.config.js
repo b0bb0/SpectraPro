@@ -4,7 +4,8 @@ const nextConfig = {
   swcMinify: true,
   output: 'standalone',
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001',
+    // Empty string = relative URLs (for Docker/Caddy). Only fall back to localhost if completely unset.
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5001',
   },
   // Security: Hide detailed error messages in production
   productionBrowserSourceMaps: false,
