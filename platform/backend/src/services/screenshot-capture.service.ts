@@ -36,8 +36,16 @@ class ScreenshotCaptureService {
   private async initBrowser(): Promise<void> {
     if (!this.browser) {
       logger.info('[SCREENSHOT] Initializing Playwright browser');
+      // Use system Chromium in Docker (Alpine), fall back to Playwright's bundled browser locally
+      const systemChromium = process.env.CHROMIUM_PATH || '/usr/lib/chromium/chromium-headless-shell';
+      const useSystem = fs.existsSync(systemChromium);
+      if (useSystem) {
+        logger.info(`[SCREENSHOT] Using system Chromium: ${systemChromium}`);
+      }
+
       this.browser = await chromium.launch({
         headless: true,
+        ...(useSystem && { executablePath: systemChromium }),
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',

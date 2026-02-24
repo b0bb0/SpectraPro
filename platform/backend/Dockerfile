@@ -32,8 +32,9 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Install system deps: OpenSSL (Prisma), Nmap (recon), Python + pip (Sublist3r)
-RUN apk add --no-cache openssl nmap python3 py3-pip
+# Install system deps: OpenSSL (Prisma), Nmap (recon), Python + pip (Sublist3r),
+# Chromium headless shell (Playwright screenshots — Alpine's system build, ~160MB)
+RUN apk add --no-cache openssl nmap python3 py3-pip chromium-headless-shell
 
 # Install Sublist3r (subdomain enumeration — used by recon + exposure services)
 RUN pip3 install --no-cache-dir --break-system-packages sublist3r
