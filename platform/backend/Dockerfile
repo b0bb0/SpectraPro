@@ -60,6 +60,14 @@ RUN apk add --no-cache wget unzip \
 # Copy Feroxbuster (Rust — compiled from source against musl in Stage 0)
 COPY --from=ferox-builder /usr/local/cargo/bin/feroxbuster /usr/local/bin/feroxbuster
 
+# Download wordlists for Feroxbuster directory enumeration
+# Only grab the specific files recon.service.ts checks for (not the full 900MB SecLists repo)
+RUN mkdir -p /usr/share/seclists/Discovery/Web-Content /usr/share/wordlists/dirb \
+ && wget -qO /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt \
+      "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/raft-medium-directories.txt" \
+ && wget -qO /usr/share/wordlists/dirb/common.txt \
+      "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt"
+
 # Regenerate Prisma client for the correct OpenSSL version
 RUN npx prisma generate
 
