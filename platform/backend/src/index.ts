@@ -47,6 +47,9 @@ import sourceScannerRoutes from './routes/source-scanner.routes';
 const app = express();
 const PORT = Number(process.env.PORT) || 5001;
 
+// Trust reverse proxy (Caddy) — required for correct client IP in rate limiting and logging
+app.set('trust proxy', 1);
+
 // ============================================================================
 // MIDDLEWARE
 // ============================================================================
