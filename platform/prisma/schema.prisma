@@ -102,8 +102,7 @@ model Asset {
   environment  AssetEnvironment  @default(PRODUCTION)
   criticality  AssetCriticality  @default(MEDIUM)
 
-  // Asset identifiers (enhanced for deduplication)
-  identifier   String            // Primary identifier (hostname/IP/domain)
+  // Asset identifiers
   ipAddress    String?
   ipAddresses  String[]          @default([]) // Multiple IPs
   hostname     String?
@@ -151,9 +150,9 @@ model Asset {
   vulnerabilities Vulnerability[]
   scans          Scan[]
 
-  @@unique([tenantId, identifier]) // Deduplication key
+  @@unique([tenantId, hostname]) // Deduplication key
   @@index([tenantId])
-  @@index([identifier])
+  @@index([hostname])
   @@index([type])
   @@index([environment])
   @@index([criticality])
