@@ -1,0 +1,159 @@
+# ── Spectra Platform — CI/CD Deploy to DigitalOcean ──────────────────
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches: [main]
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+env:
+  APP_DIR: /opt/spectra
+  COMPOSE_FILE: docker-compose.prod.yml
+
+jobs:
+  # ── Lint & Test ────────────────────────────────────────────────────
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install backend dependencies
+        working-directory: platform/backend
+        run: npm ci
+
+      - name: Lint backend
+        working-directory: platform/backend
+        run: npm run lint
+
+      - name: Generate Prisma client
+        working-directory: platform/backend
+        run: npx prisma generate
+
+      - name: Run backend tests
+        working-directory: platform/backend
+        run: npm test
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python linting tools
+        run: pip install black flake8
+
+      - name: Lint Python (black)
+        run: black --check src/
+
+      - name: Lint Python (flake8)
+        run: flake8 src/
+
+      - name: Install frontend dependencies
+        working-directory: platform/frontend
+        run: npm ci
+
+      - name: Lint frontend
+        working-directory: platform/frontend
+        run: npm run lint
+
+  # ── Deploy ─────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to Droplet
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: deploy
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            cd /opt/spectra
+
+            TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+            CURRENT_SHA=$(git rev-parse HEAD)
+
+            echo "══ Pre-deploy backup ══════════════════════════════════════"
+            # Tag current state for rollback
+            git tag "pre-deploy-${TIMESTAMP}" || true
+
+            # Load .env for DB credentials
+            set -a; source .env; set +a
+            PG_USER="${POSTGRES_USER:-spectra}"
+            PG_DB="${POSTGRES_DB:-spectra_platform}"
+
+            # Database backup
+            mkdir -p backups
+            docker compose -f docker-compose.prod.yml exec -T postgres \
+              pg_dump --clean --if-exists -U "$PG_USER" "$PG_DB" \
+              > "backups/pre-deploy-${TIMESTAMP}.sql" 2>/dev/null || echo "WARN: No running database to backup (first deploy?)"
+
+            echo "══ Pulling latest code ═══════════════════════════════════"
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "══ Building containers ═══════════════════════════════════"
+            docker compose -f docker-compose.prod.yml build
+
+            echo "══ Starting services ════════════════════════════════════"
+            docker compose -f docker-compose.prod.yml up -d
+
+            echo "══ Running migrations ═══════════════════════════════════"
+            # Wait for postgres to be healthy
+            sleep 5
+            docker compose -f docker-compose.prod.yml exec -T backend \
+              npx prisma migrate deploy
+
+            echo "══ Health check ═════════════════════════════════════════"
+            HEALTHY=false
+            for i in $(seq 1 6); do
+              if curl -sf http://localhost/health > /dev/null 2>&1; then
+                HEALTHY=true
+                break
+              fi
+              echo "  Health check attempt $i/6 failed, waiting 10s..."
+              sleep 10
+            done
+
+            if [ "$HEALTHY" = false ]; then
+              echo "══ HEALTH CHECK FAILED — ROLLING BACK ═════════════════"
+
+              # Restore database
+              if [ -f "backups/pre-deploy-${TIMESTAMP}.sql" ]; then
+                docker compose -f docker-compose.prod.yml exec -T postgres \
+                  psql -U "$PG_USER" "$PG_DB" \
+                  < "backups/pre-deploy-${TIMESTAMP}.sql" || echo "WARN: DB restore failed"
+              fi
+
+              # Rollback code
+              git checkout "pre-deploy-${TIMESTAMP}"
+              docker compose -f docker-compose.prod.yml build
+              docker compose -f docker-compose.prod.yml up -d
+
+              echo "ROLLBACK COMPLETE — deployed commit: $(git rev-parse HEAD)"
+              exit 1
+            fi
+
+            echo "══ Verifying migrations ═════════════════════════════════"
+            docker compose -f docker-compose.prod.yml exec -T backend \
+              npx prisma migrate status
+
+            echo "══ Deploy successful ════════════════════════════════════"
+            echo "Commit: $(git rev-parse HEAD)"
+            echo "Time: $(date -u)"
+
+            # Clean up old backups (keep last 10)
+            ls -1t backups/*.sql 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null || true
