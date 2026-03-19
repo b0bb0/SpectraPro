@@ -6,6 +6,8 @@ Converts analysis results to multiple formats (JSON, CSV, HTML, TXT)
 
 import json
 import csv
+import html
+import re
 from typing import Dict, List, Any
 from pathlib import Path
 from datetime import datetime
@@ -741,24 +743,71 @@ class ReportGenerator:
             return False
 
     @staticmethod
-    def _generate_vulnerability_html(vulnerabilities: List[Dict]) -> str:
-        """Generate HTML for vulnerability items"""
-        html = ""
+    def _md_to_html(text: str) -> str:
+        """Convert basic markdown to HTML with XSS prevention.
+
+        Escapes HTML first to prevent XSS, then converts:
+        - **bold** to <strong>
+        - ### headers to <h3>
+        - - list items to <ul><li>
+        """
+        # Escape HTML to prevent XSS
+        text = html.escape(text)
+        # Convert markdown bold **text** to <strong>text</strong>
+        text = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', text)
+        # Convert markdown headers ### to <h3>
+        text = re.sub(r'^###\s+(.+)$', r'<h3>\1</h3>', text, flags=re.MULTILINE)
+        # Convert markdown list items to <ul><li>
+        lines = text.split('\n')
+        result = []
+        in_list = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('- '):
+                if not in_list:
+                    result.append('<ul>')
+                    in_list = True
+                result.append(f'<li>{stripped[2:]}</li>')
+            else:
+                if in_list:
+                    result.append('</ul>')
+                    in_list = False
+                result.append(line)
+        if in_list:
+            result.append('</ul>')
+        return '\n'.join(result).strip()
+
+    @staticmethod
+    def _generate_vulnerability_html(item_or_list) -> str:
+        """Generate HTML for vulnerability items.
+
+        Accepts a single vulnerability dict or a list of dicts.
+        """
+        if isinstance(item_or_list, dict):
+            vulnerabilities = [item_or_list]
+        else:
+            vulnerabilities = item_or_list
+
+        result = ""
         for item in vulnerabilities:
             severity = item.get('severity', 'info').lower()
-            html += f"""
-        <div class="vulnerability-item severity-{severity}">
-            <div class="vuln-name">{item.get('name', 'Unknown')}</div>
-            <span class="vuln-severity badge-{severity}">{item.get('severity', 'UNKNOWN').upper()}</span>
+            name = html.escape(item.get('name', 'Unknown'))
+            vuln_id = html.escape(item.get('id', item.get('vulnerability_id', 'N/A')))
+            analysis_raw = item.get('analysis', 'No analysis available')
+            analysis_html = ReportGenerator._md_to_html(analysis_raw)
+            result += f"""
+        <div class="vulnerability-card severity-{severity}">
+            <div class="vuln-name">{name}</div>
+            <span class="vuln-severity badge-{severity}">{severity.upper()}</span>
             <div style="font-size: 0.85em; color: #666; margin: 10px 0;">
-                <strong>ID:</strong> {item.get('vulnerability_id', 'N/A')}
+                <strong>ID:</strong> {vuln_id}
             </div>
             <div class="vuln-analysis">
-                {item.get('analysis', 'No analysis available').replace(chr(10), '<br>')}
+                {analysis_html}
             </div>
         </div>
 """
-        return html if html else "<p>No vulnerabilities to display</p>"
+        return result if result else "<p>No vulnerabilities to display</p>"
 
     def save(self, output_file: str, format: str = 'json') -> bool:
         """Save results in specified format"""
