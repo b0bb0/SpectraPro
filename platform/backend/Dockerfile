@@ -37,8 +37,9 @@ COPY --from=builder /app/prisma     ./prisma
 COPY --from=builder /app/package.json ./
 
 # Install Nuclei scanner binary
+# Pin Nuclei version for reproducible builds (update explicitly when upgrading)
+ENV NUCLEI_VERSION=3.7.1
 RUN apk add --no-cache wget unzip \
- && NUCLEI_VERSION=$(wget -qO- https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep tag_name | cut -d'"' -f4 | tr -d v) \
  && ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') \
  && wget -qO /tmp/nuclei.zip "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_${ARCH}.zip" \
  && unzip /tmp/nuclei.zip -d /usr/local/bin/ \
