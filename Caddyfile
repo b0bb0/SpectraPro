@@ -1,9 +1,9 @@
 # ── Spectra Platform — Caddy Reverse Proxy ──────────────────────────
-# HTTP-only config for local network deployment.
-# No TLS — private IPs can't get Let's Encrypt certificates.
+# HTTP-only config. To enable HTTPS, replace :80 with your domain name
+# (e.g., spectrapro.ai) and Caddy will auto-provision Let's Encrypt certs.
 # ─────────────────────────────────────────────────────────────────────
 
-:3005 {
+:80 {
 	# ── API & WebSocket ─────────────────────────────────────────────
 	handle /api/* {
 		reverse_proxy backend:5001
