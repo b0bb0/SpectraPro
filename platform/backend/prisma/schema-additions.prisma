@@ -1,0 +1,305 @@
+// ============================================================================
+// SPECTRAPRO ENTERPRISE ADDITIONS
+// Add these models to the end of schema.prisma before running migration
+// ============================================================================
+
+// ============================================================================
+// RULES OF ENGAGEMENT (ROE)
+// ============================================================================
+
+enum ROEStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum ScanMethod {
+  DISCOVERY_ONLY        // Phase 0-1: Passive reconnaissance only
+  BASELINE              // Phase 0-2: Safe baseline hygiene checks
+  TARGETED              // Phase 0-2.2: AI-driven targeted scanning
+  VALIDATION            // Phase 0-3: Exploitability validation (requires approval)
+  FULL_ASSESSMENT       // All phases including impact assessment
+}
+
+model RulesOfEngagement {
+  id              String     @id @default(uuid())
+  name            String     // E.g., "Q1 2026 Production Pentest"
+  description     String?    @db.Text
+  status          ROEStatus  @default(DRAFT)
+
+  // Scope definition
+  scopeDomains    String[]   @default([]) // Allowed domains
+  scopeIPs        String[]   @default([]) // Allowed IP ranges (CIDR notation)
+  scopeUrls       String[]   @default([]) // Specific URLs/endpoints
+  excludedTargets String[]   @default([]) // Explicitly excluded targets
+
+  // Allowed methods
+  allowedMethods  ScanMethod[] @default([BASELINE]) // What scan phases are permitted
+
+  // Exploitability validation controls
+  validationEnabled            Boolean @default(false)
+  validationRequiresApproval   Boolean @default(true)
+  validationMaxAttempts        Int     @default(3)     // Max exploitation attempts per finding
+  validationTimeout            Int     @default(300)   // Max time in seconds per validation
+
+  // Rate limiting
+  maxRequestsPerSecond   Int      @default(150)
+  maxConcurrentScans     Int      @default(3)
+
+  // Time windows
+  allowedStartTime       String?  // HH:MM format, e.g., "09:00"
+  allowedEndTime         String?  // HH:MM format, e.g., "17:00"
+  allowedDaysOfWeek      Int[]    @default([1,2,3,4,5]) // 0=Sunday, 1=Monday, etc.
+
+  // Authorization
+  approvedById     String?
+  approvedBy       User?     @relation("ROEApprover", fields: [approvedById], references: [id])
+  approvedAt       DateTime?
+
+  // Validity period
+  validFrom        DateTime
+  validUntil       DateTime
+
+  // Audit
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Multi-tenancy
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdById      String
+  createdBy        User      @relation("ROECreator", fields: [createdById], references: [id])
+
+  // Relations
+  scans            Scan[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([validFrom, validUntil])
+  @@map("rules_of_engagement")
+}
+
+// ============================================================================
+// AI DECISION LEDGER (Transparency)
+// ============================================================================
+
+enum AIDecisionType {
+  TEMPLATE_SELECTION    // Phase 2: Which templates to run
+  RISK_ASSESSMENT       // Risk scoring decision
+  VALIDATION_PRIORITY   // Which vulns to validate
+  IMPACT_ANALYSIS       // Impact assessment
+  REMEDIATION_ADVICE    // Fix recommendations
+}
+
+enum AIDecisionOutcome {
+  ACCEPTED       // Decision was used
+  REJECTED       // Decision was rejected (invalid)
+  OVERRIDDEN     // User manually overrode
+  FALLBACK_USED  // Fallback rules were used instead
+}
+
+model AIDecisionLedger {
+  id                String            @id @default(uuid())
+
+  // Context
+  decisionType      AIDecisionType
+  phase             OrchestrationPhase
+
+  // Input data (hashed for privacy)
+  discoveryContextHash  String?     // SHA256 of discovery context
+  endpointMapHash       String?     // SHA256 of endpoint map
+  assetCriticality      AssetCriticality?
+  inputSummary          Json?       // Sanitized summary of inputs
+
+  // AI Model info
+  modelName             String      // E.g., "llama-3.1-8b"
+  modelVersion          String      // Model version/hash
+  temperature           Float?      // Model temperature used
+
+  // Decision output
+  decisionJson          Json        // Full AI output (structured)
+  selectedTemplates     String[]    @default([])
+  selectedTags          String[]    @default([])
+  selectedScopes        String[]    @default([])
+  confidenceScore       Float?      // 0.0-1.0
+  rationale             String?     @db.Text
+
+  // Validation results
+  outcome               AIDecisionOutcome
+  validationErrors      String[]    @default([]) // Why it was rejected
+  templatesValidated    Int         @default(0)  // How many templates passed validation
+  templatesRejected     Int         @default(0)  // How many were rejected
+  fallbackTriggered     Boolean     @default(false)
+  fallbackReason        String?
+
+  // Execution results
+  templatesExecuted     Int?        // How many actually ran
+  findingsGenerated     Int?        // Findings from this decision
+  executionTime         Int?        // Milliseconds
+
+  // Audit
+  createdAt             DateTime    @default(now())
+
+  // Relations
+  scanId                String
+  scan                  Scan        @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  tenantId              String
+  tenant                Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([tenantId])
+  @@index([decisionType])
+  @@index([outcome])
+  @@index([createdAt])
+  @@map("ai_decision_ledger")
+}
+
+// ============================================================================
+// ENDPOINT DISCOVERY (Phase 1.5)
+// ============================================================================
+
+enum EndpointMethod {
+  GET
+  POST
+  PUT
+  PATCH
+  DELETE
+  OPTIONS
+  HEAD
+  UNKNOWN
+}
+
+model EndpointMap {
+  id                String           @id @default(uuid())
+
+  // Discovery source
+  discoveredFrom    String           // URL where this endpoint was found
+  depth             Int              @default(0) // Crawl depth
+
+  // Endpoint details
+  path              String           // E.g., "/api/users"
+  fullUrl           String           // Complete URL
+  method            EndpointMethod   @default(GET)
+
+  // Parameters
+  queryParameters   String[]         @default([]) // URL parameters
+  formParameters    String[]         @default([]) // Form field names
+  jsonKeys          String[]         @default([]) // JSON body keys (if detected)
+  headers           Json?            // Observed request headers
+
+  // Classification
+  isApi             Boolean          @default(false)
+  hasAuth           Boolean          @default(false)
+  hasFileUpload     Boolean          @default(false)
+  contentType       String?          // Content-Type header
+
+  // Response metadata (lightweight)
+  statusCode        Int?
+  responseTime      Int?             // Milliseconds
+  responseSize      Int?             // Bytes
+
+  // Discovery timestamp
+  discoveredAt      DateTime         @default(now())
+
+  // Relations
+  scanId            String
+  scan              Scan             @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  assetId           String?
+  asset             Asset?           @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  tenantId          String
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([scanId, fullUrl, method]) // Deduplicate endpoints per scan
+  @@index([scanId])
+  @@index([assetId])
+  @@index([tenantId])
+  @@index([isApi])
+  @@map("endpoint_maps")
+}
+
+// ============================================================================
+// SCAN CONTROL (Kill Switch)
+// ============================================================================
+
+enum ScanControlAction {
+  PAUSE
+  RESUME
+  STOP
+  SKIP_PHASE
+}
+
+model ScanControl {
+  id              String             @id @default(uuid())
+
+  // Control action
+  action          ScanControlAction
+  reason          String?            @db.Text
+
+  // Execution
+  executedAt      DateTime           @default(now())
+  executedById    String
+  executedBy      User               @relation(fields: [executedById], references: [id])
+
+  // State before/after
+  phaseBefore     OrchestrationPhase?
+  phaseAfter      OrchestrationPhase?
+  progressBefore  Int?
+  progressAfter   Int?
+
+  // Relations
+  scanId          String
+  scan            Scan               @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  tenantId        String
+  tenant          Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([scanId])
+  @@index([tenantId])
+  @@index([executedAt])
+  @@map("scan_controls")
+}
+
+// ============================================================================
+// UPDATES TO EXISTING MODELS
+// ============================================================================
+
+// Add to Tenant model relations:
+//   rulesOfEngagement  RulesOfEngagement[]
+//   aiDecisionLedger   AIDecisionLedger[]
+//   endpointMaps       EndpointMap[]
+//   scanControls       ScanControl[]
+
+// Add to User model relations:
+//   createdROEs        RulesOfEngagement[] @relation("ROECreator")
+//   approvedROEs       RulesOfEngagement[] @relation("ROEApprover")
+//   scanControls       ScanControl[]
+
+// Add to Asset model relations:
+//   endpointMaps       EndpointMap[]
+
+// Add to Scan model:
+//   roeId              String?
+//   roe                RulesOfEngagement? @relation(fields: [roeId], references: [id], onDelete: SetNull)
+//   aiDecisions        AIDecisionLedger[]
+//   endpointMaps       EndpointMap[]
+//   controls           ScanControl[]
+//   killRequested      Boolean            @default(false) // Flag for immediate stop
+//   killRequestedAt    DateTime?
+//   killRequestedById  String?
+//   killRequestedBy    User?              @relation("ScanKillRequests", fields: [killRequestedById], references: [id])
+
+// Add to Vulnerability model (for better deduplication):
+//   deduplicationKey   String?  // Computed: hash(templateId + normalizedEndpoint + parameter + assetId)
+//   normalizedEndpoint String?  // Normalized URL for dedup (remove query params, trailing slash)
+//   affectedParameter  String?  // Specific parameter affected (for injection vulns)
+//   occurrenceCount    Int      @default(1) // How many times this was found across scans
+
+// Add index on Vulnerability:
+//   @@index([deduplicationKey])

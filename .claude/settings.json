@@ -1,0 +1,8 @@
+{
+  "enabledPlugins": {
+    "ralph-loop@claude-plugins-official": true,
+    "semgrep@claude-plugins-official": false,
+    "claude-md-management@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true
+  }
+}

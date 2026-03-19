@@ -1,0 +1,56 @@
+# Spectra Configuration File
+
+# Scanner Settings
+scanner:
+  nuclei_path: "nuclei"  # Path to nuclei binary (or 'nuclei' if in PATH)
+  output_dir: "data/scans"
+  rate_limit: 150  # Requests per second
+  timeout: 3600  # Scan timeout in seconds
+  update_templates_on_start: false
+
+# AI Analyzer Settings
+analyzer:
+  llama_api_url: "http://localhost:11434/api/generate"
+  model: "mannix/llama3.1-8b-abliterated"  # Llama model to use (requires Ollama)
+  timeout: 60  # AI request timeout in seconds
+  fallback_analysis: true  # Use basic analysis if AI unavailable
+
+# Reporter Settings
+reporter:
+  output_dir: "data/reports"
+  default_format: "html"  # html, json, markdown
+  include_raw_data: true
+  template_path: "templates" # Path to custom report templates
+
+# Database Settings
+database:
+  path: "data/spectra.db"
+  backup_enabled: false
+  backup_interval: 86400  # 24 hours in seconds
+
+# API Settings
+api:
+  host: "0.0.0.0"
+  port: 5000
+  debug: false
+  cors_enabled: true
+  rate_limiting:
+    enabled: false
+    requests_per_minute: 60
+
+# Logging Settings
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: "logs/spectra.log"
+  max_file_size: 10485760  # 10MB
+  backup_count: 5
+
+# Security Settings
+security:
+  allowed_targets: []  # Empty = all allowed, or specify whitelist
+  blocked_targets:  # Targets to never scan
+    - "localhost"
+    - "127.0.0.1"
+    - "0.0.0.0"
+  require_api_key: false
+  api_keys: []  # List of valid API keys if require_api_key is true

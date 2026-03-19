@@ -1,0 +1,20 @@
+id: example-template
+
+info:
+  name: Example Vulnerability Template
+  author: Your Name
+  severity: medium
+  description: Detects example vulnerability
+  tags:
+    - example
+    - custom
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.git"
+
+    matchers:
+      - type: status
+        status:
+          - 200

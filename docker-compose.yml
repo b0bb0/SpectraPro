@@ -1,0 +1,89 @@
+# ── Spectra Platform — Production Docker Compose ────────────────────
+# Usage:
+#   1. Copy .env.production to .env and fill in real values
+#   2. docker compose up -d --build
+#   3. docker compose exec backend npx prisma migrate deploy
+#   4. docker compose exec backend npx prisma db seed  (optional)
+# ─────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Reverse Proxy (HTTP-only, local network) ────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - spectra
+
+  # ── PostgreSQL ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-spectra_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-spectra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-spectra} -d ${POSTGRES_DB:-spectra_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - spectra
+
+  # ── Backend API ──────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./platform/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-spectra}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-spectra_platform}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      FRONTEND_URL: http://spectrapro.ai
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      OLLAMA_API_URL: ${OLLAMA_API_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120000}
+      AI_ANALYSIS_ENABLED: ${AI_ANALYSIS_ENABLED:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - spectra
+
+  # ── Frontend ─────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./platform/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://192.168.1.116:3005
+        NEXT_PUBLIC_APP_URL: http://192.168.1.116:3005
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    networks:
+      - spectra
+
+volumes:
+  postgres_data:
+  caddy_data:
+
+networks:
+  spectra:
+    driver: bridge

@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spectra-scanner"
+version = "1.0.0"
+description = "AI-powered penetration testing and vulnerability management platform"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "flask>=3.0.0",
+    "flask-cors>=4.0.0",
+    "requests>=2.31.0",
+    "pyyaml>=6.0.1",
+    "python-dateutil>=2.8.2",
+    "tqdm>=4.66.2",
+    "gunicorn>=21.2.0",
+    "playwright>=1.40.0",
+    "scrapegraphai>=1.73.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==7.4.3",
+    "pytest-cov==4.1.0",
+    "black==23.12.1",
+    "flake8==7.0.0",
+]
+
+[project.scripts]
+spectra = "src.spectra_cli:main"
+
+[tool.setuptools.packages.find]
+include = ["src*"]

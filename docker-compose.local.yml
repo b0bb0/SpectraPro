@@ -1,0 +1,105 @@
+# ── Spectra Platform — Local Hosting on MacBook ─────────────────────
+# Runs the full stack locally with Cloudflare Tunnel for public access.
+#
+# Setup (one-time):
+#   1. brew install cloudflared
+#   2. cloudflared tunnel login
+#   3. cloudflared tunnel create spectra
+#   4. Add DNS: cloudflared tunnel route dns spectra spectrapro.ai
+#   5. Copy tunnel credentials to ./cloudflared/
+#
+# Run:
+#   docker compose -f docker-compose.local.yml up -d --build
+# ─────────────────────────────────────────────────────────────────────
+
+services:
+  # ── PostgreSQL ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: spectra_platform
+      POSTGRES_USER: spectra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-spectra_local_dev}
+    volumes:
+      - postgres_local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spectra -d spectra_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - spectra
+
+  # ── Backend API ──────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./platform/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      DATABASE_URL: postgresql://spectra:${POSTGRES_PASSWORD:-spectra_local_dev}@postgres:5432/spectra_platform
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-for-real-hosting}
+      JWT_EXPIRES_IN: 24h
+      FRONTEND_URL: https://spectrapro.ai
+      LOG_LEVEL: info
+      AI_ANALYSIS_ENABLED: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - spectra
+
+  # ── Frontend ─────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./platform/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://spectrapro.ai
+        NEXT_PUBLIC_APP_URL: https://spectrapro.ai
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - spectra
+
+  # ── Cloudflare Tunnel (exposes your Mac to the internet) ─────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    networks:
+      - spectra
+
+volumes:
+  postgres_local:
+
+networks:
+  spectra:
+    driver: bridge

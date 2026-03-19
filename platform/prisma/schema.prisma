@@ -1,0 +1,475 @@
+// Spectra Platform - Database Schema
+// PostgreSQL + Prisma ORM
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// TENANT & AUTHENTICATION
+// ============================================================================
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  domain    String?  // Custom domain
+  plan      String   @default("free") // free, pro, enterprise
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  users           User[]
+  assets          Asset[]
+  vulnerabilities Vulnerability[]
+  scans           Scan[]
+  reports         Report[]
+  auditLogs       AuditLog[]
+
+  @@map("tenants")
+}
+
+enum UserRole {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  role          UserRole  @default(VIEWER)
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Multi-tenancy
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Relations
+  auditLogs    AuditLog[]
+  createdAssets Asset[] @relation("AssetCreator")
+  createdVulns  Vulnerability[] @relation("VulnCreator")
+
+  @@index([tenantId])
+  @@index([email])
+  @@map("users")
+}
+
+// ============================================================================
+// ASSETS
+// ============================================================================
+
+enum AssetType {
+  DOMAIN
+  IP
+  APPLICATION
+  API
+  CLOUD_RESOURCE
+  NETWORK_DEVICE
+}
+
+enum AssetEnvironment {
+  PRODUCTION
+  STAGING
+  DEVELOPMENT
+  TEST
+}
+
+enum AssetCriticality {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+model Asset {
+  id           String            @id @default(uuid())
+  name         String
+  type         AssetType
+  environment  AssetEnvironment  @default(PRODUCTION)
+  criticality  AssetCriticality  @default(MEDIUM)
+
+  // Asset identifiers (enhanced for deduplication)
+  identifier   String            // Primary identifier (hostname/IP/domain)
+  ipAddress    String?
+  ipAddresses  String[]          @default([]) // Multiple IPs
+  hostname     String?
+  url          String?
+  services     String[]          @default([]) // ["http", "https", "ssh"]
+
+  // Hierarchy (parent-child relationships)
+  parentAssetId String?
+  parentAsset   Asset?            @relation("AssetHierarchy", fields: [parentAssetId], references: [id], onDelete: SetNull)
+  childAssets   Asset[]           @relation("AssetHierarchy")
+
+  // Metadata
+  description  String?
+  tags         String[]          @default([])
+  owner        String?
+  source       String[]          @default([]) // ["scan", "exposure", "manual"]
+
+  // Timestamps
+  firstSeen    DateTime          @default(now())
+  lastSeen     DateTime          @default(now())
+  lastScanAt   DateTime?
+  isActive     Boolean           @default(true)
+
+  // Risk metrics (enhanced)
+  riskScore    Float             @default(0)
+  vulnCount    Int               @default(0)
+  criticalVulnCount Int          @default(0)
+  highVulnCount     Int          @default(0)
+  mediumVulnCount   Int          @default(0)
+  lowVulnCount      Int          @default(0)
+  infoVulnCount     Int          @default(0)
+  scanCount    Int               @default(0)
+
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  // Multi-tenancy
+  tenantId     String
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdById  String
+  createdBy    User              @relation("AssetCreator", fields: [createdById], references: [id])
+
+  // Relations
+  vulnerabilities Vulnerability[]
+  scans          Scan[]
+
+  @@unique([tenantId, identifier]) // Deduplication key
+  @@index([tenantId])
+  @@index([identifier])
+  @@index([type])
+  @@index([environment])
+  @@index([criticality])
+  @@index([riskScore])
+  @@index([parentAssetId])
+  @@index([source])
+  @@map("assets")
+}
+
+// ============================================================================
+// VULNERABILITIES
+// ============================================================================
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum VulnerabilityStatus {
+  OPEN
+  IN_PROGRESS
+  MITIGATED
+  ACCEPTED
+  FALSE_POSITIVE
+  REOPENED
+}
+
+model Vulnerability {
+  id              String              @id @default(uuid())
+
+  // Vulnerability details
+  title           String
+  description     String
+  severity        Severity
+  cvssScore       Float?
+  cvssVector      String?
+  cveId           String?
+  cweId           String?
+
+  // Classification
+  category        String? // e.g., "Injection", "XSS", "Misconfiguration"
+  tags            String[]
+
+  // Status tracking
+  status          VulnerabilityStatus @default(OPEN)
+  statusReason    String? // Reason for accepted/false positive
+
+  // Remediation
+  recommendation  String?
+  remediationSteps String?
+  effort          String? // Low, Medium, High
+
+  // Detection info
+  detectionMethod String? // Scanner name
+  templateId      String? // Nuclei template ID
+  matcher         String?
+
+  // Timeline
+  firstSeen       DateTime            @default(now())
+  lastSeen        DateTime            @default(now())
+  mitigatedAt     DateTime?
+  dueDate         DateTime?
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  // Multi-tenancy
+  tenantId        String
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Asset relationship
+  assetId         String
+  asset           Asset               @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  // Scan relationship
+  scanId          String?
+  scan            Scan?               @relation(fields: [scanId], references: [id], onDelete: SetNull)
+
+  createdById     String
+  createdBy       User                @relation("VulnCreator", fields: [createdById], references: [id])
+
+  // Relations
+  evidence        Evidence[]
+  history         VulnerabilityHistory[]
+
+  @@index([tenantId])
+  @@index([assetId])
+  @@index([severity])
+  @@index([status])
+  @@index([firstSeen])
+  @@index([cveId])
+  @@map("vulnerabilities")
+}
+
+// Vulnerability change history
+model VulnerabilityHistory {
+  id              String          @id @default(uuid())
+  vulnerabilityId String
+  vulnerability   Vulnerability   @relation(fields: [vulnerabilityId], references: [id], onDelete: Cascade)
+
+  field           String // Field that changed
+  oldValue        String?
+  newValue        String?
+  changedAt       DateTime        @default(now())
+  changedBy       String // User email or system
+
+  @@index([vulnerabilityId])
+  @@map("vulnerability_history")
+}
+
+// Evidence (screenshots, HTTP responses, etc.)
+model Evidence {
+  id              String          @id @default(uuid())
+  vulnerabilityId String
+  vulnerability   Vulnerability   @relation(fields: [vulnerabilityId], references: [id], onDelete: Cascade)
+
+  type            String // "screenshot", "http_response", "log", "file"
+  description     String?
+  content         String? // Text content or base64 encoded
+  fileUrl         String? // S3 or file path
+  mimeType        String?
+
+  createdAt       DateTime        @default(now())
+
+  @@index([vulnerabilityId])
+  @@map("evidence")
+}
+
+// ============================================================================
+// SCANS
+// ============================================================================
+
+enum ScanStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum ScanType {
+  NUCLEI
+  NESSUS
+  MANUAL
+  API
+}
+
+model Scan {
+  id              String        @id @default(uuid())
+  name            String
+  type            ScanType
+  status          ScanStatus    @default(PENDING)
+
+  // Scan configuration
+  targetCount     Int           @default(0)
+  severity        String[] // Severity levels scanned
+
+  // Progress tracking
+  progress        Int           @default(0) // 0-100
+  currentPhase    String?       // Current scan phase
+  templatesTotal  Int           @default(0)
+  templatesRun    Int           @default(0)
+
+  // Results
+  vulnFound       Int           @default(0)
+  criticalCount   Int           @default(0)
+  highCount       Int           @default(0)
+  mediumCount     Int           @default(0)
+  lowCount        Int           @default(0)
+  infoCount       Int           @default(0)
+
+  // Timing
+  startedAt       DateTime?
+  completedAt     DateTime?
+  duration        Int? // Seconds
+
+  // Metadata
+  scannerVersion  String?
+  templateVersion String?
+  errorMessage    String?
+  rawOutput       String? // Store full scan output
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Multi-tenancy
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  // Asset relationship (optional)
+  assetId         String?
+  asset           Asset?        @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  // Relations
+  vulnerabilities Vulnerability[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("scans")
+}
+
+// ============================================================================
+// REPORTS
+// ============================================================================
+
+enum ReportType {
+  EXECUTIVE
+  TECHNICAL
+  COMPLIANCE
+  CUSTOM
+}
+
+enum ReportFormat {
+  PDF
+  HTML
+  JSON
+  CSV
+}
+
+model Report {
+  id          String        @id @default(uuid())
+  name        String
+  type        ReportType
+  format      ReportFormat
+
+  // Filters used
+  filters     Json? // Store report filter criteria
+
+  // Content
+  filePath    String?
+  fileSize    Int?
+
+  generatedAt DateTime      @default(now())
+  expiresAt   DateTime? // Optional expiry for downloads
+
+  // Multi-tenancy
+  tenantId    String
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([generatedAt])
+  @@map("reports")
+}
+
+// ============================================================================
+// AUDIT LOGGING
+// ============================================================================
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  VIEW
+  EXPORT
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  action      AuditAction
+  resource    String // e.g., "Asset", "Vulnerability", "User"
+  resourceId  String?
+
+  details     Json? // Additional context
+  ipAddress   String?
+  userAgent   String?
+
+  createdAt   DateTime    @default(now())
+
+  // Multi-tenancy
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// ANALYTICS & TIME SERIES
+// ============================================================================
+
+// Daily aggregated metrics for trend analysis
+model DailyMetric {
+  id                String   @id @default(uuid())
+  date              DateTime @unique
+
+  // Aggregated counts
+  totalAssets       Int      @default(0)
+  totalVulns        Int      @default(0)
+  openVulns         Int      @default(0)
+  criticalVulns     Int      @default(0)
+  highVulns         Int      @default(0)
+  mediumVulns       Int      @default(0)
+  lowVulns          Int      @default(0)
+
+  // Risk metrics
+  avgRiskScore      Float    @default(0)
+  maxRiskScore      Float    @default(0)
+
+  // Activity metrics
+  newVulns          Int      @default(0)
+  mitigatedVulns    Int      @default(0)
+  scansCompleted    Int      @default(0)
+
+  createdAt         DateTime @default(now())
+
+  @@index([date])
+  @@map("daily_metrics")
+}
