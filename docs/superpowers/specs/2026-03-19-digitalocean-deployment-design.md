@@ -136,17 +136,7 @@ frontend:
 
 ## Caddy Configuration
 
-Updated `Caddyfile` to listen on `:80`:
-
-```
-:80 {
-    # /api/* -> backend
-    # /ws -> backend (WebSocket)
-    # /health -> backend
-    # /* -> frontend
-    # Security headers retained
-}
-```
+The only change to `Caddyfile` is replacing `:3005` with `:80` in the listener directive. All routing rules (`/api/*`, `/ws`, `/health` to backend, catch-all to frontend), security headers, and logging configuration remain identical.
 
 When SSL is needed later, replace `:80` with `spectrapro.ai` and Caddy auto-provisions Let's Encrypt certificates. **When switching to HTTPS, also update**: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_APP_URL`, and `FRONTEND_URL` in `.env`, then rebuild the frontend image.
 
@@ -168,7 +158,7 @@ When SSL is needed later, replace `:80` with `spectrapro.ai` and Caddy auto-prov
 #### 2. Deploy (SSH to Droplet)
 - SSH using deploy key from GitHub Secrets
 - Tag current commit as `pre-deploy-<timestamp>` for rollback
-- **Database backup**: `docker compose exec -T postgres pg_dump -U spectra spectra_platform > /opt/spectra/backups/pre-deploy-<timestamp>.sql`
+- **Database backup**: `docker compose exec -T postgres pg_dump --clean --if-exists -U spectra spectra_platform > /opt/spectra/backups/pre-deploy-<timestamp>.sql`
 - `git pull origin main`
 - `docker compose -f docker-compose.prod.yml build`
 - `docker compose -f docker-compose.prod.yml up -d`
@@ -180,7 +170,7 @@ When SSL is needed later, replace `:80` with `spectrapro.ai` and Caddy auto-prov
 - If both pass: deployment succeeds
 
 #### 4. Auto-Rollback (on health check or migration failure)
-- **Restore database**: `docker compose exec -T postgres psql -U spectra spectra_platform < /opt/spectra/backups/pre-deploy-<timestamp>.sql`
+- **Restore database** (backup includes `DROP TABLE` statements via `--clean`): `docker compose exec -T postgres psql -U spectra spectra_platform < /opt/spectra/backups/pre-deploy-<timestamp>.sql`
 - `git checkout <pre-deploy tag>`
 - Rebuild and restart containers
 - Notify via GitHub Actions annotation
@@ -282,6 +272,8 @@ AI_ANALYSIS_ENABLED=true
 ```
 
 This file lives only on the Droplet at `/opt/spectra/.env` with `chmod 600`. Never committed to git.
+
+**CORS gotcha**: `FRONTEND_URL` must **exactly match** the `Origin` header the browser sends. During the IP-only phase (before DNS is configured), use `http://<droplet-ip>`. Only switch to `http://spectrapro.ai` after DNS resolves to the Droplet. Any mismatch (trailing slash, wrong port, domain before DNS propagates) causes CORS 403 on all API calls with no fallback — the Droplet's public IP is not a private RFC-1918 address, so the backend's private-network regex does not apply.
 
 **SSL transition checklist**: When adding HTTPS, update `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_APP_URL`, and `FRONTEND_URL` from `http://` to `https://spectrapro.ai`, then rebuild the frontend image.
 
