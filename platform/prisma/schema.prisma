@@ -303,6 +303,25 @@ enum ScanType {
   API
 }
 
+enum ScanProfile {
+  FAST
+  BALANCED
+  DEEP
+}
+
+enum OrchestrationPhase {
+  PREFLIGHT
+  DISCOVERY
+  TARGETED_SCAN
+  DEEP_SCAN
+  PROCESSING
+  COMPLETED
+  FAILED
+  PASSIVE_SIGNALS
+  BASELINE_HYGIENE
+  CORRELATION
+}
+
 model Scan {
   id              String        @id @default(uuid())
   name            String
@@ -331,6 +350,13 @@ model Scan {
   startedAt       DateTime?
   completedAt     DateTime?
   duration        Int? // Seconds
+
+  // Enterprise orchestration
+  scanProfile          ScanProfile?         @default(BALANCED)
+  orchestrationPhase   OrchestrationPhase?  @default(PREFLIGHT)
+  deepScanAuthorized   Boolean              @default(false)
+  authConfig           Json?
+  assetContext         Json?
 
   // Metadata
   scannerVersion  String?
