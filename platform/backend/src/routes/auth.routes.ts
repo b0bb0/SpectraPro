@@ -45,6 +45,20 @@ const registerSchema = z.object({
   tenantName: z.string().min(1),
 });
 
+function isSecureRequest(req: any): boolean {
+  const forwardedProto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim();
+  const origin = req.headers.origin as string | undefined;
+  const referer = req.headers.referer as string | undefined;
+
+  return (
+    process.env.FORCE_HTTPS === 'true' ||
+    req.secure === true ||
+    forwardedProto === 'https' ||
+    origin?.startsWith('https://') === true ||
+    referer?.startsWith('https://') === true
+  );
+}
+
 /**
  * POST /api/auth/login
  * Login user
@@ -55,24 +69,24 @@ router.post('/login', authMutateLimiter, async (req, res, next) => {
 
     const result = await authService.login(body.email, body.password, req.ip);
 
-    // Log successful login
-    const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.socket.remoteAddress;
+    // Log successful login — use req.ip which respects trust proxy settings
     const userAgent = req.headers['user-agent'];
 
     await auditService.logLogin(
       result.user.id,
       result.user.tenant.id,
-      ipAddress,
+      req.ip,
       userAgent
     );
 
     // Set HTTP-only cookie
     // secure: false for HTTP (local/private network); set true behind HTTPS proxy
-    const isHTTPS = process.env.FORCE_HTTPS === 'true' || req.secure;
+    const isHTTPS = isSecureRequest(req);
+    const sameSite = isHTTPS ? 'none' : 'lax';
     res.cookie('token', result.token, {
       httpOnly: true,
       secure: isHTTPS,
-      sameSite: 'lax',
+      sameSite,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     });
 
@@ -96,11 +110,12 @@ router.post('/register', authMutateLimiter, async (req, res, next) => {
     const result = await authService.register(body as any);
 
     // Set HTTP-only cookie
-    const isHTTPS = process.env.FORCE_HTTPS === 'true' || req.secure;
+    const isHTTPS = isSecureRequest(req);
+    const sameSite = isHTTPS ? 'none' : 'lax';
     res.cookie('token', result.token, {
       httpOnly: true,
       secure: isHTTPS,
-      sameSite: 'lax',
+      sameSite,
       maxAge: 24 * 60 * 60 * 1000,
     });
 
@@ -118,18 +133,23 @@ router.post('/register', authMutateLimiter, async (req, res, next) => {
  * Logout user
  */
 router.post('/logout', requireAuth, async (req, res) => {
-  // Log logout
-  const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.socket.remoteAddress;
+  // Log logout — use req.ip which respects trust proxy settings
   const userAgent = req.headers['user-agent'];
 
   await auditService.logLogout(
     req.user!.userId,
     req.tenantId!,
-    ipAddress,
+    req.ip,
     userAgent
   );
 
-  res.clearCookie('token');
+  const isHTTPS = isSecureRequest(req);
+  const sameSite = isHTTPS ? 'none' : 'lax';
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: isHTTPS,
+    sameSite,
+  });
   res.json({
     success: true,
     message: 'Logged out successfully',
@@ -161,11 +181,12 @@ router.post('/refresh', authReadLimiter, requireAuth, async (req, res, next) => 
   try {
     const result = await authService.refreshToken(req.user!);
 
-    const isHTTPS = process.env.FORCE_HTTPS === 'true' || req.secure;
+    const isHTTPS = isSecureRequest(req);
+    const sameSite = isHTTPS ? 'none' : 'lax';
     res.cookie('token', result.token, {
       httpOnly: true,
       secure: isHTTPS,
-      sameSite: 'lax',
+      sameSite,
       maxAge: 24 * 60 * 60 * 1000,
     });
 

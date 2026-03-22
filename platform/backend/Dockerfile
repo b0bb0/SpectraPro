@@ -26,7 +26,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-RUN apk add --no-cache openssl \
+RUN apk add --no-cache openssl nmap \
  && addgroup --system --gid 1001 spectra \
  && adduser  --system --uid 1001 spectra
 
@@ -36,10 +36,11 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma     ./prisma
 COPY --from=builder /app/package.json ./
 
-# Install Nuclei scanner binary
-# Pin Nuclei version for reproducible builds (update explicitly when upgrading)
+# Install runtime tooling used by reconnaissance/exposure features.
+# Pin Nuclei version for reproducible builds (update explicitly when upgrading).
 ENV NUCLEI_VERSION=3.7.1
-RUN apk add --no-cache wget unzip \
+RUN apk add --no-cache wget unzip python3 py3-pip \
+ && pip3 install --no-cache-dir --break-system-packages sublist3r \
  && ARCH=$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') \
  && wget -qO /tmp/nuclei.zip "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_${ARCH}.zip" \
  && unzip /tmp/nuclei.zip -d /usr/local/bin/ \

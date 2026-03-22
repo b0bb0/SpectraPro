@@ -46,6 +46,7 @@ import sourceScannerRoutes from './routes/source-scanner.routes';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5001;
+app.set('trust proxy', true);
 
 // ============================================================================
 // MIDDLEWARE
@@ -68,8 +69,16 @@ app.use(helmet({
 }));
 
 // CORS
-const allowedOrigins: string[] = [
+const configuredFrontendOrigins = [
   process.env.FRONTEND_URL,
+  ...(process.env.FRONTEND_URLS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+];
+
+const allowedOrigins: string[] = [
+  ...configuredFrontendOrigins,
   // Localhost origins (always allowed — needed for local MacBook deployment)
   'http://localhost:3000',
   'http://localhost:3001',
@@ -83,6 +92,8 @@ const allowedOrigins: string[] = [
 
 // Also allow any private-network origin (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
 const PRIVATE_NET_RE = /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/;
+// Allow the SpectraPRO frontend deployed on Vercel, including preview aliases and deployment URLs.
+const VERCEL_FRONTEND_RE = /^https:\/\/frontend(?:-[a-z0-9-]+)?\.vercel\.app$/;
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -92,6 +103,8 @@ app.use(cors({
     if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return callback(null, true);
     // Allow private network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
     if (PRIVATE_NET_RE.test(origin)) return callback(null, true);
+    // Allow Vercel-hosted frontend URLs for this project.
+    if (VERCEL_FRONTEND_RE.test(origin)) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
@@ -205,28 +218,26 @@ async function startServer() {
       logger.info(`✓ API: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
       logger.info(`✓ WebSocket: ws://localhost:${PORT}/ws`);
     });
+
+    // Graceful shutdown — close HTTP server to drain in-flight requests
+    const gracefulShutdown = async (signal: string) => {
+      logger.info(`${signal} received, shutting down gracefully...`);
+      server.close(() => {
+        logger.info('HTTP server closed');
+      });
+      await schedulerService.stop();
+      websocketService.shutdown();
+      await prisma.$disconnect();
+      process.exit(0);
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);
   }
 }
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down gracefully...');
-  await schedulerService.stop();
-  websocketService.shutdown();
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, shutting down gracefully...');
-  await schedulerService.stop();
-  websocketService.shutdown();
-  await prisma.$disconnect();
-  process.exit(0);
-});
 
 // Start the server
 startServer();

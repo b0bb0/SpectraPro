@@ -3,7 +3,14 @@
  */
 
 export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+  process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === 'development' ? 'http://localhost:5001' : '');
+
+if (!API_URL && typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+  console.warn(
+    '[SpectraPro] NEXT_PUBLIC_API_URL is not set. API calls will use relative URLs — this only works behind a reverse proxy that forwards /api/* to the backend.'
+  );
+}
 
 export class APIError extends Error {
   constructor(

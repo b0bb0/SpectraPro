@@ -4,7 +4,9 @@ const nextConfig = {
   swcMinify: true,
   output: 'standalone',
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001',
+    NEXT_PUBLIC_API_URL:
+      process.env.NEXT_PUBLIC_API_URL ||
+      (process.env.NODE_ENV === 'development' ? 'http://localhost:5001' : ''),
   },
   // Security: Hide detailed error messages in production
   productionBrowserSourceMaps: false,

@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileText, Download, Plus, CheckCircle, X, Loader2, AlertTriangle, Trash2, FileDown } from 'lucide-react';
-import { scansAPI, reportsAPI } from '@/lib/api';
+import { FileText, Download, Plus, CheckCircle, X, Loader2, AlertTriangle, FileDown } from 'lucide-react';
+import { API_URL, scansAPI, reportsAPI } from '@/lib/api';
 
 interface Scan {
   id: string;
@@ -84,7 +84,7 @@ export default function ReportsPage() {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:5001/api/reports/generate', {
+      const response = await fetch(`${API_URL}/api/reports/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -97,12 +97,27 @@ export default function ReportsPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || 'Failed to generate report');
+        const errorText = await response.text();
+        let errorMessage = 'Failed to generate report';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error?.message || errorMessage;
+        } catch {
+          // Response was not JSON
+        }
+        throw new Error(errorMessage);
       }
 
-      // Get the HTML content
-      const htmlText = await response.text();
+      // Get the HTML content — handle both raw HTML and JSON-wrapped responses
+      const responseText = await response.text();
+      let htmlText: string;
+      try {
+        const parsed = JSON.parse(responseText);
+        htmlText = parsed.data || parsed.html || responseText;
+      } catch {
+        // Response is raw HTML
+        htmlText = responseText;
+      }
 
       // Create new report object
       const newReport: GeneratedReport = {
@@ -289,7 +304,7 @@ export default function ReportsPage() {
 
               <div className="mb-4">
                 <p className="text-gray-400 text-sm">
-                  Generated {formatDate(report.generatedAt.toString())}
+                  Generated {formatDate(report.generatedAt.toISOString())}
                 </p>
               </div>
 
