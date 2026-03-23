@@ -1,0 +1,53 @@
+# ── Spectra Platform — Caddy Reverse Proxy (Production) ───────────────
+# HTTPS config for live server deployment with automatic TLS.
+# Caddy will obtain and renew Let's Encrypt certificates automatically.
+#
+# Prerequisites:
+#   - DNS A record: spectrapro.ai → your server IP
+#   - DNS A record: www.spectrapro.ai → your server IP
+#   - Ports 80 and 443 open on the server
+# ──────────────────────────────────────────────────────────────────────
+
+spectrapro.ai, www.spectrapro.ai {
+	# ── API & WebSocket ─────────────────────────────────────────────
+	handle /api/* {
+		reverse_proxy backend:5001
+	}
+
+	handle /ws {
+		reverse_proxy backend:5001
+	}
+
+	handle /health {
+		reverse_proxy backend:5001
+	}
+
+	# ── Scanner API ────────────────────────────────────────────────
+	handle /scanner/* {
+		uri strip_prefix /scanner
+		reverse_proxy scanner:5000
+	}
+
+	# ── Frontend (catch-all) ────────────────────────────────────────
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	# ── Security headers ───────────────────────────────────────────
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		-Server
+	}
+
+	# ── Logging ────────────────────────────────────────────────────
+	log {
+		output file /data/logs/access.log {
+			roll_size 100mb
+			roll_keep 5
+		}
+	}
+}
