@@ -1,18 +1,208 @@
-name: Docker Image CI
+name: Build & Deploy
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+
+env:
+  REGISTRY: ghcr.io
 
 jobs:
-
-  build:
-
+  # ── Build backend ────────────────────────────────────────────────
+  build-backend:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
     steps:
-    - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/backend
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./platform/backend
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+  # ── Build frontend ───────────────────────────────────────────────
+  build-frontend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/frontend
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./platform/frontend
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+            NEXT_PUBLIC_APP_URL=${{ vars.APP_URL || 'http://localhost' }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+
+  # ── Build scanner ────────────────────────────────────────────────
+  build-scanner:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/scanner
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push scanner image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.scanner
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=scanner
+          cache-to: type=gha,scope=scanner,mode=max
+
+  # ── Deploy (only on push to main, requires SSH secrets) ─────────
+  deploy:
+    needs: [build-backend, build-frontend, build-scanner]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'http://localhost' }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          envs: REGISTRY,REPO,SHA,POSTGRES_PASSWORD,JWT_SECRET,APP_URL
+          script: |
+            set -euo pipefail
+
+            # Clone repo if not already present
+            if [ ! -d ~/spectra/.git ]; then
+              git clone "https://github.com/${REPO}.git" ~/spectra
+            fi
+
+            cd ~/spectra
+            git fetch origin main
+            git reset --hard origin/main
+
+            # Write .env from deployment secrets
+            cat > .env <<EOF
+            POSTGRES_DB=spectra_platform
+            POSTGRES_USER=spectra
+            POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+            JWT_SECRET=${JWT_SECRET}
+            JWT_EXPIRES_IN=24h
+            LOG_LEVEL=info
+            # AI analysis requires Ollama to be running — enable with: AI_ANALYSIS_ENABLED=true
+            AI_ANALYSIS_ENABLED=false
+            FRONTEND_URL=${APP_URL}
+            EOF
+
+            # Pull pre-built images from GHCR and start all services
+            docker compose pull
+            docker compose up -d
+
+            # Wait for backend to be ready, then run database migrations
+            echo "Waiting for backend to be healthy..."
+            timeout=120
+            until docker compose exec -T backend wget -q --spider http://localhost:5001/health 2>/dev/null; do
+              timeout=$((timeout - 5))
+              if [ "$timeout" -le 0 ]; then
+                echo "Backend failed to become healthy after 120s" >&2
+                docker compose logs backend >&2
+                exit 1
+              fi
+              sleep 5
+            done
+            docker compose exec -T backend npx prisma migrate deploy
+
+            echo "Deployment complete — $(date)"
