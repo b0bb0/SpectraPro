@@ -16,14 +16,18 @@ logger = logging.getLogger(__name__)
 class NucleiScanner:
     """Manages Nuclei vulnerability scanning operations"""
 
-    def __init__(self, output_dir: str = "data/scans"):
+    def __init__(self, output_dir: str = "data/scans", rate_limit: int = 150, timeout: int = 3600):
         """
         Initialize Nuclei Scanner
 
         Args:
             output_dir: Directory to store scan results
+            rate_limit: Default request rate limit
+            timeout: Default scan timeout in seconds
         """
         self.output_dir = output_dir
+        self.default_rate_limit = rate_limit
+        self.default_timeout = timeout
         self.nuclei_path = self._find_nuclei()
 
     def _find_nuclei(self) -> str:
@@ -40,7 +44,7 @@ class NucleiScanner:
         severity: Optional[List[str]] = None,
         tags: Optional[List[str]] = None,
         templates: Optional[List[str]] = None,
-        rate_limit: int = 150
+        rate_limit: Optional[int] = None
     ) -> Dict:
         """
         Perform vulnerability scan on target
@@ -57,6 +61,10 @@ class NucleiScanner:
             Dict containing scan results and metadata
         """
         logger.info(f"Starting scan on target: {target}")
+
+        # Use instance defaults if not explicitly provided
+        if rate_limit is None:
+            rate_limit = self.default_rate_limit
 
         # Generate unique scan ID
         scan_id = f"scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -101,7 +109,7 @@ class NucleiScanner:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=3600  # 1 hour timeout
+                timeout=self.default_timeout
             )
 
             # Log output for debugging
@@ -109,8 +117,17 @@ class NucleiScanner:
                 logger.debug(f"Nuclei stdout: {result.stdout[:500]}")
             if result.stderr:
                 logger.info(f"Nuclei stderr: {result.stderr[:500]}")
+
             if result.returncode != 0:
-                logger.warning(f"Nuclei exited with code {result.returncode}")
+                stderr_msg = result.stderr[:500] if result.stderr else 'No error output'
+                logger.error(f"Nuclei exited with code {result.returncode}: {stderr_msg}")
+                return {
+                    'scan_id': scan_id,
+                    'target': target,
+                    'timestamp': datetime.now().isoformat(),
+                    'status': 'failed',
+                    'error': f'Nuclei exited with code {result.returncode}: {stderr_msg}'
+                }
 
             # Parse results
             scan_results = self._parse_results(output_file)

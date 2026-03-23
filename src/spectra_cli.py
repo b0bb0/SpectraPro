@@ -12,6 +12,8 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional
 
+import yaml
+
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -28,6 +30,45 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def load_config(project_root: str) -> Dict:
+    """Load configuration from config.yaml, falling back to defaults."""
+    config_path = os.path.join(project_root, "config", "config.yaml")
+    defaults = {
+        'scanner': {
+            'nuclei_path': 'nuclei',
+            'output_dir': 'data/scans',
+            'rate_limit': 150,
+            'timeout': 3600,
+        },
+        'analyzer': {
+            'llama_api_url': 'http://localhost:11434/api/generate',
+            'model': 'mannix/llama3.1-8b-abliterated',
+            'timeout': 60,
+        },
+        'reporter': {
+            'output_dir': 'data/reports',
+            'default_format': 'html',
+        },
+        'database': {
+            'path': 'data/spectra.db',
+        },
+    }
+
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                file_config = yaml.safe_load(f) or {}
+            # Merge file config over defaults (one level deep)
+            for section, values in defaults.items():
+                if section in file_config and isinstance(file_config[section], dict):
+                    values.update(file_config[section])
+            logger.info(f"Loaded config from {config_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load config from {config_path}: {e}. Using defaults.")
+
+    return defaults
+
+
 class SpectraCLI:
     """Main CLI application"""
 
@@ -36,11 +77,29 @@ class SpectraCLI:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(script_dir)
 
-        # Use absolute paths
-        self.scanner = NucleiScanner(output_dir=os.path.join(project_root, "data/scans"))
-        self.analyzer = AIAnalyzer()
-        self.reporter = ReportGenerator(output_dir=os.path.join(project_root, "data/reports"))
-        self.db = Database(db_path=os.path.join(project_root, "data/spectra.db"))
+        # Load config from config.yaml
+        config = load_config(project_root)
+
+        # Use absolute paths, with config values
+        scanner_cfg = config['scanner']
+        analyzer_cfg = config['analyzer']
+
+        self.scanner = NucleiScanner(
+            output_dir=os.path.join(project_root, scanner_cfg['output_dir']),
+            rate_limit=scanner_cfg['rate_limit'],
+            timeout=scanner_cfg['timeout'],
+        )
+        self.analyzer = AIAnalyzer(
+            llama_api_url=analyzer_cfg['llama_api_url'],
+            model=analyzer_cfg['model'],
+            timeout=analyzer_cfg['timeout'],
+        )
+        self.reporter = ReportGenerator(
+            output_dir=os.path.join(project_root, config['reporter']['output_dir'])
+        )
+        self.db = Database(
+            db_path=os.path.join(project_root, config['database']['path'])
+        )
 
     def run_full_scan(self, target, severity=None, output_format='html'):
         """

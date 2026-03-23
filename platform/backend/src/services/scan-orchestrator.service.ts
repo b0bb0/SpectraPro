@@ -497,7 +497,7 @@ class ScanOrchestratorService {
       '-rate-limit', '150',
       '-c', '25',
       '-no-interactsh',
-      '-silent',
+      '-stats',
       '-o', outputFile,
       ...this.buildAuthArgs(authConfig), // Add authentication headers
     ];
@@ -697,7 +697,7 @@ class ScanOrchestratorService {
       '-timeout', config.timeout.toString(),
       '-rate-limit', config.rateLimit.toString(),
       '-c', config.concurrency.toString(),
-      '-silent',
+      '-stats',
       '-o', outputFile,
     ];
 
@@ -765,7 +765,7 @@ class ScanOrchestratorService {
       '-c', '25',
       '-severity', 'info,low', // Only info and low severity
       '-no-interactsh',
-      '-silent',
+      '-stats',
       '-o', outputFile,
     ];
 
@@ -815,7 +815,7 @@ class ScanOrchestratorService {
       '-c', '30',
       '-severity', 'info,low,medium,high,critical',
       '-no-interactsh',
-      '-silent',
+      '-stats',
       '-o', outputFile,
     ];
 
@@ -1111,7 +1111,7 @@ class ScanOrchestratorService {
       '-c', config.concurrency.toString(),
       '-severity', 'medium,high,critical',
       '-no-interactsh',
-      '-silent',
+      '-stats',
       '-o', outputFile,
     ];
 

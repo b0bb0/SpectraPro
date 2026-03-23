@@ -18,7 +18,8 @@ class AIAnalyzer:
     def __init__(
         self,
         llama_api_url: str = "http://localhost:11434/api/generate",
-        model: str = "hf.co/mlabonne/Meta-Llama-3.1-8B-Instruct-abliterated:BF16"
+        model: str = "mannix/llama3.1-8b-abliterated",
+        timeout: int = 60
     ):
         """
         Initialize AI Analyzer
@@ -26,9 +27,11 @@ class AIAnalyzer:
         Args:
             llama_api_url: Ollama API endpoint
             model: Llama model to use
+            timeout: Request timeout in seconds
         """
         self.api_url = llama_api_url
         self.model = model
+        self.timeout = timeout
         logger.info(f"AI Analyzer initialized with model: {model}")
 
     def analyze_vulnerabilities(
@@ -120,6 +123,55 @@ class AIAnalyzer:
             'details': categories
         }
 
+    def _build_vulnerability_details(self, categorized: Dict, max_vulns: int = 15) -> str:
+        """Build detailed vulnerability listing for the AI prompt, prioritized by severity."""
+        lines = []
+        seen = set()
+        count = 0
+        severity_order = ['critical', 'high', 'medium', 'low', 'info']
+
+        for severity in severity_order:
+            for vuln in categorized['details'].get(severity, []):
+                if count >= max_vulns:
+                    break
+                template_id = vuln.get('template-id', 'unknown')
+                # Deduplicate by template-id for the prompt
+                if template_id in seen:
+                    continue
+                seen.add(template_id)
+
+                info = vuln.get('info', {})
+                name = info.get('name', template_id)
+                desc = info.get('description', '')
+                matched_at = vuln.get('matched-at', 'N/A')
+                cve_id = info.get('classification', {}).get('cve-id') if isinstance(info.get('classification'), dict) else None
+                references = info.get('reference', [])
+
+                entry = f"- [{severity.upper()}] {name} (template: {template_id})"
+                if cve_id:
+                    cve_str = cve_id if isinstance(cve_id, str) else ', '.join(cve_id[:3])
+                    entry += f" | CVE: {cve_str}"
+                entry += f"\n  URL: {matched_at}"
+                if desc:
+                    entry += f"\n  Description: {desc[:200]}"
+                if references and isinstance(references, list):
+                    entry += f"\n  References: {', '.join(references[:2])}"
+
+                lines.append(entry)
+                count += 1
+            if count >= max_vulns:
+                break
+
+        remaining = len(categorized['details'].get('critical', []) +
+                       categorized['details'].get('high', []) +
+                       categorized['details'].get('medium', []) +
+                       categorized['details'].get('low', []) +
+                       categorized['details'].get('info', [])) - count
+        if remaining > 0:
+            lines.append(f"\n... and {remaining} additional findings (lower priority)")
+
+        return '\n'.join(lines)
+
     def _calculate_risk_score(self, results: List[Dict]) -> float:
         """Calculate overall risk score (0-100)"""
         severity_weights = {
@@ -156,7 +208,7 @@ class AIAnalyzer:
                     'prompt': prompt,
                     'stream': False
                 },
-                timeout=60
+                timeout=self.timeout
             )
 
             if response.status_code == 200:
@@ -171,10 +223,11 @@ class AIAnalyzer:
             return self._generate_fallback_analysis(categorized)
 
     def _build_analysis_prompt(self, categorized: Dict, target: str) -> str:
-        """Build prompt for AI analysis"""
+        """Build prompt for AI analysis with specific vulnerability details"""
         by_severity = categorized['by_severity']
+        vuln_details = self._build_vulnerability_details(categorized)
 
-        prompt = f"""You are a cybersecurity expert analyzing vulnerability scan results.
+        prompt = f"""You are a cybersecurity expert analyzing vulnerability scan results from a Nuclei scan.
 
 Target: {target}
 
@@ -185,16 +238,17 @@ Vulnerability Summary:
 - Low: {by_severity['low']}
 - Info: {by_severity['info']}
 
-Vulnerability Types Found: {', '.join(categorized['by_type'].keys())}
+Detailed Findings (highest severity first):
+{vuln_details}
 
-Please provide:
-1. Overall security posture assessment
-2. Most critical vulnerabilities and their potential impact
-3. Attack vectors that could be exploited
-4. Priority order for remediation
-5. Potential business impact if vulnerabilities are exploited
+Based on these specific findings, provide:
+1. Overall security posture assessment for this target
+2. Analysis of the most critical vulnerabilities found and their real-world impact
+3. Specific attack chains or vectors an attacker could exploit using these findings
+4. Priority remediation order with specific actions for each finding
+5. Business impact assessment
 
-Keep the analysis concise, technical, and actionable."""
+Be specific — reference the actual vulnerabilities and URLs found above. Keep the analysis concise and actionable."""
 
         return prompt
 
