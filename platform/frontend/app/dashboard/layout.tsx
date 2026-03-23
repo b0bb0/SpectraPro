@@ -35,6 +35,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import StarCanvas from '@/components/StarCanvas'
+import { WebSocketProvider } from '@/contexts/WebSocketContext'
 
 interface NavItem {
   name: string
@@ -103,6 +104,7 @@ export default function DashboardLayout({
 
   return (
     <ProtectedRoute>
+    <WebSocketProvider>
       <div className="min-h-screen text-[var(--color-text)] transition-colors" style={{ background: 'var(--color-bg)' }}>
         {/* Cosmic background layers */}
         <StarCanvas />
@@ -444,6 +446,7 @@ export default function DashboardLayout({
           </main>
         </div>
       </div>
+    </WebSocketProvider>
     </ProtectedRoute>
   )
 }

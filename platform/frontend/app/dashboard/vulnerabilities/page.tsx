@@ -21,6 +21,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { vulnerabilitiesAPI } from '@/lib/api'
+import { getSeverityColor, getStatusColor } from '@/lib/colors'
 
 interface Asset {
   id: string
@@ -39,7 +40,7 @@ interface Vulnerability {
   status: string
   firstSeen: string
   lastSeen: string
-  asset: Asset
+  assets: Asset
   _count: {
     evidence: number
   }
@@ -221,7 +222,7 @@ export default function VulnerabilitiesPage() {
           v.status,
           v.cvssScore,
           v.cveId || '-',
-          v.asset?.name || "Unknown Asset",
+          v.assets?.name || "Unknown Asset",
           new Date(v.firstSeen).toLocaleDateString(),
         ].join(',')
       ),
@@ -238,42 +239,15 @@ export default function VulnerabilitiesPage() {
     window.URL.revokeObjectURL(url)
   }
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity.toUpperCase()) {
-      case 'CRITICAL':
-        return 'bg-purple-500/20 text-purple-400 border-purple-500/30'
-      case 'HIGH':
-        return 'bg-red-500/20 text-red-400 border-red-500/30'
-      case 'MEDIUM':
-        return 'bg-orange-500/20 text-orange-400 border-orange-500/30'
-      case 'LOW':
-        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
-      case 'INFO':
-        return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-      default:
-        return 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-    }
+  // Severity / status colors sourced from @/lib/colors
+  const severityClasses = (severity: string) => {
+    const c = getSeverityColor(severity)
+    return `${c.bg} ${c.text} ${c.border}`
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'OPEN':
-        return 'bg-red-500/20 text-red-400 border-red-500/30'
-      case 'IN_PROGRESS':
-        return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-      case 'MITIGATED':
-        return 'bg-green-500/20 text-green-400 border-green-500/30'
-      case 'ACCEPTED':
-        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
-      case 'FALSE_POSITIVE':
-        return 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-      case 'REOPENED':
-        return 'bg-orange-500/20 text-orange-400 border-orange-500/30'
-      case 'CONTROLLED':
-        return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30'
-      default:
-        return 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-    }
+  const statusClasses = (status: string) => {
+    const c = getStatusColor(status)
+    return `${c.bg} ${c.text} ${c.border}`
   }
 
   const formatStatus = (status: string) => status.replace(/_/g, ' ')
@@ -485,7 +459,7 @@ export default function VulnerabilitiesPage() {
                     onClick={() => toggleSeverity(sev)}
                     className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                       filters.severity.includes(sev)
-                        ? getSeverityColor(sev) + ' border'
+                        ? severityClasses(sev) + ' border'
                         : 'bg-dark-200 text-gray-400 border border-gray-700 hover:border-gray-600'
                     }`}
                   >
@@ -507,7 +481,7 @@ export default function VulnerabilitiesPage() {
                     onClick={() => toggleStatus(stat)}
                     className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                       filters.status.includes(stat)
-                        ? getStatusColor(stat) + ' border'
+                        ? statusClasses(stat) + ' border'
                         : 'bg-dark-200 text-gray-400 border border-gray-700 hover:border-gray-600'
                     }`}
                   >
@@ -651,7 +625,7 @@ export default function VulnerabilitiesPage() {
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
                       <span
-                        className={`px-2 py-1 rounded text-xs font-semibold border ${getSeverityColor(
+                        className={`px-2 py-1 rounded text-xs font-semibold border ${severityClasses(
                           vuln.severity
                         )}`}
                       >
@@ -667,7 +641,7 @@ export default function VulnerabilitiesPage() {
                           aria-haspopup="listbox"
                           aria-expanded={statusDropdownOpen === vuln.id}
                           aria-label={`Change status, currently ${formatStatus(vuln.status)}`}
-                          className={`px-2 py-1 rounded text-xs font-semibold border flex items-center space-x-1.5 hover:ring-1 hover:ring-white/20 transition-all ${getStatusColor(
+                          className={`px-2 py-1 rounded text-xs font-semibold border flex items-center space-x-1.5 hover:ring-1 hover:ring-white/20 transition-all ${statusClasses(
                             vuln.status
                           )}`}
                         >
@@ -722,7 +696,7 @@ export default function VulnerabilitiesPage() {
                     <h3 className="text-white font-semibold mb-1">{vuln.title}</h3>
                     <p className="text-gray-400 text-sm line-clamp-2 mb-2">{vuln.description}</p>
                     <div className="flex items-center space-x-4 text-xs text-gray-500">
-                      <span>Asset: {vuln.asset?.name || "Unknown Asset"}</span>
+                      <span>Asset: {vuln.assets?.name || "Unknown Asset"}</span>
                       <span>First Seen: {formatDate(vuln.firstSeen)}</span>
                       {vuln._count.evidence > 0 && <span>{vuln._count.evidence} Evidence</span>}
                     </div>

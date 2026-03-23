@@ -1,9 +1,13 @@
 # ── Spectra Platform — Caddy Reverse Proxy ──────────────────────────
-# HTTP-only config. To enable HTTPS, replace :80 with your domain name
-# (e.g., spectrapro.ai) and Caddy will auto-provision Let's Encrypt certs.
+# To enable HTTPS:
+#   1. Set SITE_ADDRESS=yourdomain.com in .env
+#   2. Ensure ports 80+443 are open (Caddy handles Let's Encrypt automatically)
+#   3. Rebuild: docker compose -f docker-compose.prod.yml up -d --build caddy
+#
+# Default: HTTP-only on port 80 (when SITE_ADDRESS is not set)
 # ─────────────────────────────────────────────────────────────────────
 
-:80 {
+{$SITE_ADDRESS::80} {
 	# ── API & WebSocket ─────────────────────────────────────────────
 	handle /api/* {
 		reverse_proxy backend:5001

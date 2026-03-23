@@ -17,8 +17,35 @@ const body = Space_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'SpectraPRO - AI-Powered Vulnerability Management',
-  description: 'Enterprise-grade vulnerability management platform with AI-powered analysis',
+  title: {
+    default: 'SpectraPRO — Offensive Security Command Platform',
+    template: '%s | SpectraPRO',
+  },
+  description:
+    'Orchestrated recon, deep scanning, AI-powered triage, and executive-ready intelligence. Vulnerability management for teams that ship fast.',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
+  openGraph: {
+    title: 'SpectraPRO — Offensive Security Command Platform',
+    description:
+      'Orchestrated recon, deep scanning, AI-powered triage, and executive-ready intelligence.',
+    siteName: 'SpectraPRO',
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'SpectraPRO — Offensive Security Command Platform',
+    description:
+      'Orchestrated recon, deep scanning, AI-powered triage, and executive-ready intelligence.',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
 }
 
 export default function RootLayout({

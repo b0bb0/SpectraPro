@@ -1,22 +1,21 @@
 'use client'
 
-import React, { Component, ReactNode } from 'react'
+import React from 'react'
 import { AlertTriangle } from 'lucide-react'
 
 interface Props {
-  children: ReactNode
-  fallback?: ReactNode
+  children: React.ReactNode
 }
 
 interface State {
   hasError: boolean
-  error?: Error
+  error: Error | null
 }
 
-export class ErrorBoundary extends Component<Props, State> {
+export default class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props)
-    this.state = { hasError: false }
+    this.state = { hasError: false, error: null }
   }
 
   static getDerivedStateFromError(error: Error): State {
@@ -24,40 +23,24 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    // Log error to console in development
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Error caught by boundary:', error, errorInfo)
-    }
-
-    // In production, you might want to send this to an error tracking service
-    // like Sentry, LogRocket, etc.
+    console.error('ErrorBoundary caught:', error, errorInfo)
   }
 
   render() {
     if (this.state.hasError) {
-      if (this.props.fallback) {
-        return this.props.fallback
-      }
-
       return (
-        <div className="min-h-screen flex items-center justify-center bg-background p-4">
-          <div className="glass-panel p-8 max-w-lg w-full text-center">
-            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle className="w-8 h-8 text-red-400" />
-            </div>
-            <h2 className="text-2xl font-bold text-text-primary mb-2">
-              Something went wrong
-            </h2>
-            <p className="text-text-secondary mb-6">
-              We encountered an unexpected error. Please try refreshing the page.
-            </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="btn-premium px-6 py-2.5"
-            >
-              Refresh Page
-            </button>
-          </div>
+        <div className="flex flex-col items-center justify-center min-h-[400px] p-8">
+          <AlertTriangle className="w-12 h-12 text-red-400 mb-4" />
+          <h2 className="text-xl font-semibold text-white mb-2">Something went wrong</h2>
+          <p className="text-gray-400 text-sm mb-4 text-center max-w-md">
+            An unexpected error occurred. Please try refreshing the page.
+          </p>
+          <button
+            onClick={() => this.setState({ hasError: false, error: null })}
+            className="btn-secondary px-4 py-2 text-sm"
+          >
+            Try Again
+          </button>
         </div>
       )
     }
@@ -65,5 +48,3 @@ export class ErrorBoundary extends Component<Props, State> {
     return this.props.children
   }
 }
-
-export default ErrorBoundary

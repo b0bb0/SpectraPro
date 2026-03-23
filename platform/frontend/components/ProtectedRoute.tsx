@@ -15,7 +15,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push('/login')
+      router.push('/login?sessionExpired=1')
     }
   }, [user, loading, router])
 

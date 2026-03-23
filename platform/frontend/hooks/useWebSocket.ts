@@ -3,9 +3,9 @@
  * Connects to backend WebSocket server and handles real-time events
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import Cookies from 'js-cookie';
+import { useEffect, useState } from 'react';
 import { API_URL } from '@/lib/api';
+import { useWebSocketContext } from '@/contexts/WebSocketContext';
 
 export interface ScanProgressEvent {
   type: 'scan_progress';
@@ -94,145 +94,11 @@ export interface UseWebSocketReturn {
 }
 
 /**
- * Hook to connect to WebSocket server and receive real-time scan updates
+ * Hook to connect to WebSocket server and receive real-time scan updates.
+ * Uses the singleton WebSocketProvider — all consumers share one connection.
  */
 export function useWebSocket(): UseWebSocketReturn {
-  const [isConnected, setIsConnected] = useState(false);
-  const [lastEvent, setLastEvent] = useState<WebSocketEvent | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const maxReconnectAttempts = 5;
-  const reconnectDelay = 3000; // 3 seconds
-
-  const connect = useCallback(() => {
-    // Get JWT token from cookies
-    const token = Cookies.get('token');
-
-    if (!token) {
-      setError('No authentication token found');
-      setIsConnected(false);
-      return;
-    }
-
-    // Determine WebSocket URL based on environment
-    const wsUrl = API_URL.replace('http', 'ws') + `/ws?token=${token}`;
-
-    try {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[WebSocket] Connecting to:', wsUrl.replace(token, 'TOKEN'));
-      }
-
-      // Create WebSocket connection
-      const ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[WebSocket] Connected');
-        }
-        setIsConnected(true);
-        setError(null);
-        reconnectAttemptsRef.current = 0; // Reset reconnect attempts on success
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as WebSocketEvent;
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[WebSocket] Received:', data.type, data);
-          }
-          setLastEvent(data);
-        } catch (err) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('[WebSocket] Failed to parse message:', err);
-          }
-        }
-      };
-
-      ws.onerror = (event) => {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('[WebSocket] Error:', event);
-        }
-        setError('WebSocket connection error');
-      };
-
-      ws.onclose = (event) => {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[WebSocket] Disconnected:', event.code, event.reason);
-        }
-        setIsConnected(false);
-        wsRef.current = null;
-
-        // Attempt to reconnect if not intentional close
-        if (event.code !== 1000 && reconnectAttemptsRef.current < maxReconnectAttempts) {
-          reconnectAttemptsRef.current++;
-          if (process.env.NODE_ENV === 'development') {
-            console.log(
-              `[WebSocket] Reconnecting... (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`
-            );
-          }
-
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
-          }, reconnectDelay);
-        } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-          setError('Failed to connect after multiple attempts');
-        }
-      };
-
-      wsRef.current = ws;
-    } catch (err: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('[WebSocket] Connection failed:', err);
-      }
-      setError(err.message);
-      setIsConnected(false);
-    }
-  }, []);
-
-  const reconnect = useCallback(() => {
-    // Close existing connection
-    if (wsRef.current) {
-      wsRef.current.close(1000, 'Manual reconnect');
-      wsRef.current = null;
-    }
-
-    // Clear any pending reconnect timeout
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    // Reset reconnect attempts
-    reconnectAttemptsRef.current = 0;
-
-    // Reconnect
-    connect();
-  }, [connect]);
-
-  // Connect on mount
-  useEffect(() => {
-    connect();
-
-    // Cleanup on unmount
-    return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-
-      if (wsRef.current) {
-        wsRef.current.close(1000, 'Component unmounted');
-      }
-    };
-  }, [connect]);
-
-  return {
-    isConnected,
-    lastEvent,
-    error,
-    reconnect,
-  };
+  return useWebSocketContext();
 }
 
 /**

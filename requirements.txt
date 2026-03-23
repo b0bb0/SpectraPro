@@ -6,7 +6,7 @@ flask==3.0.0
 flask-cors==4.0.0
 
 # HTTP Requests
-requests==2.31.0
+requests==2.32.5
 
 # Configuration
 pyyaml==6.0.1
@@ -19,7 +19,7 @@ argparse  # Included in Python standard library
 
 # Utilities
 python-dateutil==2.8.2
-tqdm==4.66.2  # Progress bars for CLI
+tqdm==4.67.1  # Progress bars for CLI
 
 # Testing
 pytest==7.4.3
@@ -33,8 +33,12 @@ flake8==7.0.0
 gunicorn==21.2.0
 
 # Screenshots
-playwright==1.40.0  # For taking screenshots of vulnerabilities
+playwright==1.57.0  # For taking screenshots of vulnerabilities
 scrapegraphai>=1.73.0
+langsmith==0.4.8
+langchain==1.2.10
+langchain-classic==1.0.1
+langchain-community==0.4.1
 
 # Optional: Advanced features
 # Uncomment if needed

@@ -5,6 +5,8 @@
 import { Router } from 'express';
 import { requireAuth, enforceTenantIsolation } from '../middleware/auth.middleware';
 import { scanService } from '../services/scan.service';
+import { AssetService } from '../services/asset.service';
+import { prisma } from '../utils/prisma';
 import { logger } from '../utils/logger';
 import { z } from 'zod';
 
@@ -309,13 +311,101 @@ router.post('/bulk', async (req, res, next) => {
 
 /**
  * POST /api/scans/ingest
- * Ingest scan results from external scanners
+ * Ingest scan results from the Python CLI scanner or external tools.
+ * Accepts Nuclei JSONL results and creates a scan record with vulnerabilities.
  */
-router.post('/ingest', async (req, res) => {
-  res.json({
-    success: true,
-    message: 'Scan ingestion endpoint - to be implemented',
-  });
+const ingestSchema = z.object({
+  target: z.string().min(1),
+  scanLevel: z.enum(['light', 'normal', 'extreme']).default('normal'),
+  results: z.array(z.object({
+    'template-id': z.string(),
+    info: z.object({
+      name: z.string(),
+      severity: z.string(),
+      description: z.string().optional().default(''),
+      tags: z.array(z.string()).optional().default([]),
+      classification: z.object({
+        'cvss-score': z.number().optional(),
+        'cve-id': z.array(z.string()).optional(),
+      }).optional(),
+    }),
+    host: z.string().optional().default(''),
+    matched_at: z.string().optional().default(''),
+    request: z.string().optional(),
+    response: z.string().optional(),
+    'curl-command': z.string().optional(),
+    'matcher-name': z.string().optional(),
+  })).default([]),
+});
+
+router.post('/ingest', async (req, res, next) => {
+  try {
+    const tenantId = req.tenantId!;
+    const userId = req.user?.userId;
+
+    const validation = ingestSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', details: validation.error.issues },
+      });
+    }
+
+    const { target, scanLevel, results } = validation.data;
+
+    // Create scan record
+    const scan = await prisma.scans.create({
+      data: {
+        name: `CLI Ingest - ${target}`,
+        type: 'NUCLEI',
+        status: 'COMPLETED',
+        targetCount: 1,
+        vulnFound: results.length,
+        criticalCount: results.filter(r => r.info.severity.toLowerCase() === 'critical').length,
+        highCount: results.filter(r => r.info.severity.toLowerCase() === 'high').length,
+        mediumCount: results.filter(r => r.info.severity.toLowerCase() === 'medium').length,
+        lowCount: results.filter(r => r.info.severity.toLowerCase() === 'low').length,
+        infoCount: results.filter(r => r.info.severity.toLowerCase() === 'info').length,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        tenantId,
+      },
+    });
+
+    // Find or create asset for this target
+    const assetService = new AssetService();
+    const normalizedTarget = target.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const isIp = /^\d{1,3}(\.\d{1,3}){3}$/.test(normalizedTarget);
+    const assetResult = await assetService.findOrCreateAsset(
+      tenantId,
+      userId || 'system',
+      { name: normalizedTarget, type: isIp ? 'IP' : 'DOMAIN', url: target },
+      'cli-ingest'
+    );
+    const asset = assetResult.asset;
+
+    // Store vulnerabilities using the existing service method
+    if (results.length > 0) {
+      await scanService.ingestVulnerabilities(results as any, scan.id, tenantId, asset.id);
+    }
+
+    // Link asset to scan
+    await prisma.scans.update({
+      where: { id: scan.id },
+      data: { assetId: asset.id },
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        scanId: scan.id,
+        assetId: asset.id,
+        vulnerabilitiesIngested: results.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 export default router;

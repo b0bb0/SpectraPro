@@ -4,7 +4,7 @@
   "description": "Spectra Vulnerability Management Platform - Frontend",
   "private": true,
   "scripts": {
-    "dev": "NODE_ENV=development next dev",
+    "dev": "NODE_ENV=development next dev -p 3003",
     "dev:clean": "rm -rf .next && NODE_ENV=development next dev -p 3003",
     "build": "next build",
     "start": "next start",

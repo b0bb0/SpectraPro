@@ -170,7 +170,7 @@ export default function ReconnaissancePage() {
           setArtifacts(grouped);
         }).catch(() => {});
         reconAPI.getFindings(sid).then(r => setFindings(r.findings || [])).catch(() => {});
-        reconAPI.getScreenshots(sid).then(r => setScreenshots(r.data || [])).catch(() => {});
+        reconAPI.getScreenshots(sid).then(r => setScreenshots(r || [])).catch(() => {});
       }, 3000);
     }
     return () => { if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; } };
@@ -238,7 +238,7 @@ export default function ReconnaissancePage() {
           ]);
           if (pr.status === 'fulfilled') setPhaseRuns(pr.value || []);
           if (fd.status === 'fulfilled') setFindings(fd.value.findings || []);
-          if (sd.status === 'fulfilled') setScreenshots(sd.value.data || []);
+          if (sd.status === 'fulfilled') setScreenshots(sd.value || []);
         } catch (e) { console.error('Failed to fetch initial data:', e); }
         toast.success('Reconnaissance session ready!');
       }
@@ -275,7 +275,7 @@ export default function ReconnaissancePage() {
   };
   const fetchScreenshots = async () => {
     if (!session) return;
-    try { const r = await reconAPI.getScreenshots(session.id); setScreenshots(r.data || []); } catch (e) { /* silent */ }
+    try { const r = await reconAPI.getScreenshots(session.id); setScreenshots(r || []); } catch (e) { /* silent */ }
   };
   const getScreenshotForSubdomain = (subdomain: string) => screenshots.find(s => s.payload?.subdomain === subdomain);
 
@@ -312,7 +312,7 @@ export default function ReconnaissancePage() {
       ]);
       if (phaseRunsResult.status === 'fulfilled') setPhaseRuns(phaseRunsResult.value || []);
       if (findingsResult.status === 'fulfilled') setFindings((findingsResult.value as any)?.findings || []);
-      if (screenshotsResult.status === 'fulfilled') setScreenshots((screenshotsResult.value as any)?.data || []);
+      if (screenshotsResult.status === 'fulfilled') setScreenshots((screenshotsResult.value as any) || []);
       toast.success('Session restored — picking up where you left off!');
     } catch (e) {
       toast.error('Failed to restore session.');
@@ -357,7 +357,7 @@ export default function ReconnaissancePage() {
           ]);
           if (pr.status === 'fulfilled') setPhaseRuns(pr.value || []);
           if (fd.status === 'fulfilled') setFindings(fd.value.findings || []);
-          if (sd.status === 'fulfilled') setScreenshots(sd.value.data || []);
+          if (sd.status === 'fulfilled') setScreenshots(sd.value || []);
         } catch (e) { /* silent */ }
         toast.success('Asset created! Reconnaissance ready.');
       }

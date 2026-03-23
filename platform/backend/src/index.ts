@@ -46,7 +46,7 @@ import sourceScannerRoutes from './routes/source-scanner.routes';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5001;
-app.set('trust proxy', true);
+app.set('trust proxy', 1); // Trust only the first proxy hop (Caddy)
 
 // ============================================================================
 // MIDDLEWARE
@@ -157,7 +157,9 @@ app.use('/api/discovery-scan', discoveryScanRoutes);
 app.use('/api/impact', impactRoutes);
 app.use('/api/attack-chains', attackChainRoutes);
 app.use('/api/kill-switch', killSwitchRoutes);
-app.use('/api/debug', debugRoutes);
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/debug', debugRoutes);
+}
 app.use('/api/source-scanner', sourceScannerRoutes);
 
 // 404 handler

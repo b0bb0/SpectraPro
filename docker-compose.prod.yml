@@ -18,6 +18,9 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -99,7 +102,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1536M
+          memory: 2560M
     logging:
       driver: json-file
       options:

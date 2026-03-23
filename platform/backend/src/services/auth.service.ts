@@ -192,7 +192,9 @@ export class AuthService {
       throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
     }
 
-    return user;
+    // Remap 'tenants' → 'tenant' to match the frontend's expected key
+    const { tenants, ...rest } = user;
+    return { ...rest, tenant: tenants };
   }
 
   /**
@@ -225,6 +227,11 @@ export class AuthService {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        tenant: {
+          id: user.tenants.id,
+          name: user.tenants.name,
+          slug: user.tenants.slug,
+        },
       },
     };
   }

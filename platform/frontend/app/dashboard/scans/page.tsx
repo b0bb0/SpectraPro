@@ -4,6 +4,7 @@ import { MouseEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCw, CheckCircle, XCircle, Clock, Target, Search, X, Layers, Square } from 'lucide-react';
 import { scansAPI } from '@/lib/api';
+import { getScanStatusColor } from '@/lib/colors';
 import NewScanModal from '@/components/NewScanModal';
 import BulkScanModal from '@/components/BulkScanModal';
 import { useWebSocket, useBulkScanUpdates } from '@/hooks/useWebSocket';
@@ -23,7 +24,7 @@ interface Scan {
   mediumCount: number;
   lowCount: number;
   infoCount: number;
-  asset?: {
+  assets?: {
     id: string;
     name: string;
     hostname?: string;
@@ -169,20 +170,8 @@ export default function ScansPage() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'COMPLETED':
-        return 'text-green-500';
-      case 'FAILED':
-        return 'text-red-500';
-      case 'RUNNING':
-        return 'text-blue-500';
-      case 'PENDING':
-        return 'text-yellow-500';
-      default:
-        return 'text-gray-500';
-    }
-  };
+  // Scan status color sourced from @/lib/colors
+  const getStatusColor = (status: string) => getScanStatusColor(status).text;
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString();
@@ -192,9 +181,9 @@ export default function ScansPage() {
     const searchLower = searchTerm.toLowerCase();
     return (
       scan.name.toLowerCase().includes(searchLower) ||
-      scan.asset?.name?.toLowerCase().includes(searchLower) ||
-      scan.asset?.hostname?.toLowerCase().includes(searchLower) ||
-      scan.asset?.ipAddress?.toLowerCase().includes(searchLower)
+      scan.assets?.name?.toLowerCase().includes(searchLower) ||
+      scan.assets?.hostname?.toLowerCase().includes(searchLower) ||
+      scan.assets?.ipAddress?.toLowerCase().includes(searchLower)
     );
   });
 
@@ -446,7 +435,7 @@ export default function ScansPage() {
                     <div>
                       <h3 className="text-white font-semibold">{scan.name}</h3>
                       <p className="text-gray-400 text-sm">
-                        {scan.asset?.hostname || scan.asset?.ipAddress || scan.asset?.name}
+                        {scan.assets?.hostname || scan.assets?.ipAddress || scan.assets?.name}
                       </p>
                     </div>
                   </div>
@@ -531,7 +520,7 @@ export default function ScansPage() {
                     <div>
                       <h3 className="text-white font-semibold">{scan.name}</h3>
                       <p className="text-gray-400 text-sm">
-                        {scan.asset?.hostname || scan.asset?.ipAddress || scan.asset?.name}
+                        {scan.assets?.hostname || scan.assets?.ipAddress || scan.assets?.name}
                       </p>
                     </div>
                   </div>

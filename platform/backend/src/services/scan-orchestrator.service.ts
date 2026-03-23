@@ -293,41 +293,43 @@ class ScanOrchestratorService {
     });
 
     // Phase 1: Discovery (always required)
+    // FAST: use tags to limit to common tech fingerprints (~50 templates)
+    // BALANCED/DEEP: scan full technology folders
+    const isFast = profile === ScanProfile.FAST;
     phases.push({
       phase: ScanPhase.DISCOVERY,
       displayName: 'Technology Discovery',
       description: 'Fingerprinting technologies and attack surface',
-      templatePaths: [
-        'http/technologies/',
-        'dns/',
-        'ssl/',
-      ],
-      flags: ['-timeout', '5', '-no-interactsh'],
+      templatePaths: isFast
+        ? ['ssl/']  // FAST: only ssl checks (~15 templates)
+        : ['http/technologies/', 'dns/', 'ssl/'],
+      flags: isFast
+        ? ['-timeout', '5', '-no-interactsh']
+        : ['-timeout', '5', '-no-interactsh'],
       timeout: 5,
-      rateLimit: 150,
-      concurrency: 25,
+      rateLimit: 100,
+      concurrency: isFast ? 20 : 10,
       severity: ['info', 'low', 'medium', 'high', 'critical'],
-      estimatedDuration: 15,
+      estimatedDuration: isFast ? 3 : 15,
       required: true,
     });
 
-    // Phase 1.5: Passive Signals (always required for all profiles)
-    phases.push({
-      phase: ScanPhase.PASSIVE_SIGNALS,
-      displayName: 'Passive Exposure Detection',
-      description: 'Deterministic exposure signals (info/low severity only)',
-      templatePaths: [
-        'http/exposures/',
-        'http/exposed-panels/',
-      ],
-      flags: ['-timeout', '5', '-no-interactsh'],
-      timeout: 5,
-      rateLimit: 150,
-      concurrency: 25,
-      severity: ['info', 'low'],
-      estimatedDuration: 20,
-      required: true,
-    });
+    // Phase 1.5: Passive Signals (BALANCED and DEEP only — too slow for FAST)
+    if (!isFast) {
+      phases.push({
+        phase: ScanPhase.PASSIVE_SIGNALS,
+        displayName: 'Passive Exposure Detection',
+        description: 'Deterministic exposure signals (info/low severity only)',
+        templatePaths: ['http/exposures/', 'http/exposed-panels/'],
+        flags: ['-timeout', '5', '-no-interactsh'],
+        timeout: 5,
+        rateLimit: 100,
+        concurrency: 10,
+        severity: ['info', 'low'],
+        estimatedDuration: 20,
+        required: true,
+      });
+    }
 
     // Phase 2: Targeted Scan (always required, AI-driven with profile strictness)
     phases.push({
@@ -337,8 +339,8 @@ class ScanOrchestratorService {
       templatePaths: [], // Populated by AI analysis after discovery
       flags: ['-timeout', '10', '-irr'],
       timeout: 10,
-      rateLimit: 100,
-      concurrency: 15,
+      rateLimit: 50,
+      concurrency: 5,
       severity: profile === ScanProfile.FAST ? ['high', 'critical'] : ['info', 'low', 'medium', 'high', 'critical'],
       estimatedDuration: profile === ScanProfile.FAST ? 30 : 60,
       required: true,
@@ -359,8 +361,8 @@ class ScanOrchestratorService {
         ],
         flags: ['-timeout', '10', '-no-interactsh'],
         timeout: 10,
-        rateLimit: 150,
-        concurrency: 30,
+        rateLimit: 50,
+        concurrency: 5,
         severity: ['info', 'low', 'medium', 'high', 'critical'],
         estimatedDuration: 45,
         required: true,
@@ -382,8 +384,8 @@ class ScanOrchestratorService {
         ],
         flags: ['-timeout', '15', '-irr'],
         timeout: 15,
-        rateLimit: 100,
-        concurrency: 30,
+        rateLimit: 30,
+        concurrency: 3,
         severity: ['info', 'low', 'medium', 'high', 'critical'],
         estimatedDuration: 180,
         required: false, // Only runs if explicitly authorized
@@ -483,22 +485,23 @@ class ScanOrchestratorService {
 
     const outputFile = path.join(this.outputDir, `${scanId}-discovery.jsonl`);
 
-    // Get templates path from environment
+    // Build template args from phase config
     const templatesPath = process.env.NUCLEI_TEMPLATES_PATH || '';
-    const templatePath = templatesPath
-      ? path.join(templatesPath, 'http/technologies/')
-      : 'http/technologies/';
+    const templateArgs: string[] = [];
+    for (const tp of config.templatePaths) {
+      templateArgs.push('-t', templatesPath ? path.join(templatesPath, tp) : tp);
+    }
 
     const args = [
       '-u', target,
-      '-t', templatePath,
+      ...templateArgs,
       '-jsonl',
       '-timeout', '5',
-      '-rate-limit', '150',
-      '-c', '25',
-      '-no-interactsh',
+      '-rate-limit', config.rateLimit.toString(),
+      '-c', config.concurrency.toString(),
       '-stats',
       '-o', outputFile,
+      ...config.flags, // includes -no-interactsh and any tag filters
       ...this.buildAuthArgs(authConfig), // Add authentication headers
     ];
 
@@ -757,27 +760,24 @@ class ScanOrchestratorService {
     const outputFile = path.join(this.outputDir, `${scanId}-passive.jsonl`);
     const templatesPath = process.env.NUCLEI_TEMPLATES_PATH || '';
 
+    // Build template args from phase config (respects FAST vs BALANCED/DEEP)
+    const templateArgs: string[] = [];
+    for (const tp of config.templatePaths) {
+      templateArgs.push('-t', templatesPath ? path.join(templatesPath, tp) : tp);
+    }
+
     const args = [
       '-u', target,
+      ...templateArgs,
       '-jsonl',
       '-timeout', '5',
-      '-rate-limit', '150',
-      '-c', '25',
-      '-severity', 'info,low', // Only info and low severity
+      '-rate-limit', config.rateLimit.toString(),
+      '-c', config.concurrency.toString(),
+      '-severity', config.severity.join(','),
       '-no-interactsh',
       '-stats',
       '-o', outputFile,
     ];
-
-    // Add template folders for passive detection
-    if (templatesPath) {
-      args.push('-templates', templatesPath);
-      args.push('-t', 'http/exposures/');
-      args.push('-t', 'http/exposed-panels/');
-    } else {
-      args.push('-t', 'http/exposures/');
-      args.push('-t', 'http/exposed-panels/');
-    }
 
     await this.runNucleiPhase(scanId, args, 'Passive Signals');
 
@@ -807,33 +807,24 @@ class ScanOrchestratorService {
     const outputFile = path.join(this.outputDir, `${scanId}-baseline.jsonl`);
     const templatesPath = process.env.NUCLEI_TEMPLATES_PATH || '';
 
+    // Build template args from phase config
+    const templateArgs: string[] = [];
+    for (const tp of config.templatePaths) {
+      templateArgs.push('-t', templatesPath ? path.join(templatesPath, tp) : tp);
+    }
+
     const args = [
       '-u', target,
+      ...templateArgs,
       '-jsonl',
       '-timeout', '10',
-      '-rate-limit', '150',
-      '-c', '30',
-      '-severity', 'info,low,medium,high,critical',
+      '-rate-limit', config.rateLimit.toString(),
+      '-c', config.concurrency.toString(),
+      '-severity', config.severity.join(','),
       '-no-interactsh',
       '-stats',
       '-o', outputFile,
     ];
-
-    // Add baseline security folders
-    if (templatesPath) {
-      args.push('-templates', templatesPath);
-      args.push('-t', 'http/misconfiguration/');
-      args.push('-t', 'http/exposures/');
-      args.push('-t', 'http/default-logins/');
-      args.push('-t', 'ssl/');
-      args.push('-t', 'dns/');
-    } else {
-      args.push('-t', 'http/misconfiguration/');
-      args.push('-t', 'http/exposures/');
-      args.push('-t', 'http/default-logins/');
-      args.push('-t', 'ssl/');
-      args.push('-t', 'dns/');
-    }
 
     await this.runNucleiPhase(scanId, args, 'Baseline Hygiene');
 
@@ -1217,6 +1208,11 @@ class ScanOrchestratorService {
     phaseName: string
   ): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Add memory-safe bulk-size cap if not already present
+      if (!args.includes('-bulk-size')) {
+        args.push('-bulk-size', '25');
+      }
+
       consoleService.appendOutput(scanId, `[${phaseName}] nuclei ${args.join(' ')}`);
 
       const nucleiProcess = spawn('nuclei', args, {
@@ -1224,7 +1220,7 @@ class ScanOrchestratorService {
         env: { ...process.env, TERM: 'dumb' },
       });
       this.registerProcess(scanId, nucleiProcess);
-      const phaseTimeoutMs = 10 * 60 * 1000; // 10 minutes hard timeout per phase
+      const phaseTimeoutMs = 20 * 60 * 1000; // 20 minutes hard timeout per phase
       let settled = false;
 
       const timeoutHandle = setTimeout(() => {
@@ -1235,8 +1231,9 @@ class ScanOrchestratorService {
         } catch {
           // ignore kill errors
         }
-        consoleService.appendOutput(scanId, `[${phaseName}] Timed out after ${phaseTimeoutMs / 1000}s`);
-        reject(new Error(`Nuclei phase ${phaseName} timed out`));
+        consoleService.appendOutput(scanId, `[${phaseName}] Timed out after ${phaseTimeoutMs / 1000}s — using partial results`);
+        // On timeout, resolve with partial results rather than failing the whole scan
+        resolve();
       }, phaseTimeoutMs);
 
       nucleiProcess.stdout.on('data', (data) => {
@@ -1265,6 +1262,13 @@ class ScanOrchestratorService {
         settled = true;
         clearTimeout(timeoutHandle);
         if (code === 0) {
+          resolve();
+        } else if (code === null) {
+          // Process was killed by signal (OOM or external kill) — always continue with partial results
+          const outputFile = args[args.indexOf('-o') + 1];
+          const hasPartial = outputFile && fs.existsSync(outputFile) && fs.statSync(outputFile).size > 0;
+          logger.warn(`[ORCHESTRATOR] ${scanId}: Nuclei phase ${phaseName} killed by signal (OOM?) — ${hasPartial ? 'has partial results, continuing' : 'no results'}`);
+          consoleService.appendOutput(scanId, `[${phaseName}] Process killed (possible OOM) — continuing with ${hasPartial ? 'partial' : 'no'} results`);
           resolve();
         } else {
           reject(new Error(`Nuclei phase ${phaseName} failed with code ${code}`));

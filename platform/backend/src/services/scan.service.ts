@@ -435,6 +435,14 @@ export class ScanService {
           // Store vulnerabilities in database
           await this.storeVulnerabilities(results, scanId, tenantId, assetId);
 
+          // Update asset risk metrics after storing new vulnerabilities
+          try {
+            const assetSvc = new AssetService();
+            await assetSvc.updateAssetRiskMetrics(assetId);
+          } catch (err: any) {
+            logger.warn(`Failed to update asset risk metrics: ${err.message}`);
+          }
+
           // Count vulnerabilities by severity
           const vulnCounts = {
             critical: 0,
@@ -622,6 +630,25 @@ export class ScanService {
   }
 
   /**
+   * Public method for ingesting vulnerabilities from external sources (CLI, API)
+   */
+  async ingestVulnerabilities(
+    results: NucleiResult[],
+    scanId: string,
+    tenantId: string,
+    assetId: string
+  ): Promise<void> {
+    await this.storeVulnerabilities(results, scanId, tenantId, assetId);
+    // Update asset risk metrics after ingestion
+    try {
+      const assetSvc = new AssetService();
+      await assetSvc.updateAssetRiskMetrics(assetId);
+    } catch (err: any) {
+      logger.warn(`Failed to update asset risk metrics: ${err.message}`);
+    }
+  }
+
+  /**
    * Store vulnerabilities in database
    */
   private async storeVulnerabilities(
@@ -638,6 +665,8 @@ export class ScanService {
       return;
     }
 
+    // Wrap all vulnerability storage in a transaction to prevent partial writes
+    await prisma.$transaction(async (tx) => {
     for (const result of results) {
       try {
         // Map Nuclei severity to our severity levels
@@ -650,18 +679,27 @@ export class ScanService {
         const cveIds = result.info.classification?.['cve-id'] || [];
         const cveId = cveIds.length > 0 ? cveIds[0] : null;
 
-        // Check if vulnerability already exists for this asset
-        const existing = await prisma.vulnerabilities.findFirst({
+        // Generate deduplication fingerprint
+        const crypto = require('crypto');
+        const dedupComponents = [
+          result['template-id'] || '',
+          assetId,
+          result.matched_at || result.host || '',
+        ].join('|').toLowerCase();
+        const deduplicationKey = crypto.createHash('sha256').update(dedupComponents).digest('hex');
+
+        // Check if vulnerability already exists for this asset using fingerprint
+        const existing = await tx.vulnerabilities.findFirst({
           where: {
             assetId,
-            cveId: cveId || result.info.name,
+            deduplicationKey,
             status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED'] },
           },
         });
 
         if (existing) {
           // Update existing vulnerability
-          await prisma.vulnerabilities.update({
+          await tx.vulnerabilities.update({
             where: { id: existing.id },
             data: {
               lastSeen: new Date(),
@@ -669,12 +707,13 @@ export class ScanService {
               targetUrl: result.matched_at || result.host,
               rawResponse: result.response || null,
               curlCommand: result['curl-command'] || null,
+              occurrenceCount: { increment: 1 },
             },
           });
 
           // Create new evidence for this scan iteration
           if (result.request) {
-            await prisma.evidence.create({
+            await tx.evidence.create({
               data: {
                 vulnerabilityId: existing.id,
                 type: 'http_request',
@@ -686,7 +725,7 @@ export class ScanService {
           }
 
           if (result.response) {
-            await prisma.evidence.create({
+            await tx.evidence.create({
               data: {
                 vulnerabilityId: existing.id,
                 type: 'http_response',
@@ -698,7 +737,7 @@ export class ScanService {
           }
         } else {
           // Create new vulnerability
-          const vuln = await prisma.vulnerabilities.create({
+          const vuln = await tx.vulnerabilities.create({
             data: {
               tenantId,
               assetId,
@@ -707,7 +746,8 @@ export class ScanService {
               description: result.info.description || `Detected by template: ${result['template-id']}`,
               severity,
               cvssScore,
-              cveId: cveId || result.info.name,
+              cveId: cveId || null,
+              deduplicationKey,
               status: 'OPEN',
               firstSeen: new Date(),
               lastSeen: new Date(),
@@ -724,7 +764,7 @@ export class ScanService {
 
           // Create evidence records for HTTP request/response
           if (result.request) {
-            await prisma.evidence.create({
+            await tx.evidence.create({
               data: {
                 vulnerabilityId: vuln.id,
                 type: 'http_request',
@@ -736,7 +776,7 @@ export class ScanService {
           }
 
           if (result.response) {
-            await prisma.evidence.create({
+            await tx.evidence.create({
               data: {
                 vulnerabilityId: vuln.id,
                 type: 'http_response',
@@ -749,7 +789,7 @@ export class ScanService {
 
           // Add curl command as evidence if available
           if (result['curl-command']) {
-            await prisma.evidence.create({
+            await tx.evidence.create({
               data: {
                 vulnerabilityId: vuln.id,
                 type: 'log',
@@ -764,6 +804,7 @@ export class ScanService {
         logger.error(`Failed to store vulnerability: ${error.message}`);
       }
     }
+    }, { timeout: 60000 }); // 60s timeout for large scan results
   }
 
   /**
@@ -874,7 +915,7 @@ export class ScanService {
    * Get scan by ID
    */
   async getScanById(scanId: string, tenantId: string): Promise<any> {
-    return prisma.scans.findFirst({
+    const scan = await prisma.scans.findFirst({
       where: {
         id: scanId,
         tenantId,
@@ -911,13 +952,18 @@ export class ScanService {
         },
       },
     });
+    if (scan) {
+      const { authConfig: _stripped, ...safeScan } = scan;
+      return safeScan;
+    }
+    return scan;
   }
 
   /**
    * Get all scans for tenant
    */
   async getScans(tenantId: string, limit: number = 50): Promise<any> {
-    return prisma.scans.findMany({
+    const scans = await prisma.scans.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -938,6 +984,7 @@ export class ScanService {
         },
       },
     });
+    return scans.map(({ authConfig: _stripped, ...safeScan }) => safeScan);
   }
 
   /**

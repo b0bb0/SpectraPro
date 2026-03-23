@@ -104,57 +104,69 @@ class ScanIntegrationService {
 
       // Phase 1.5: Passive Signals (always required)
       consoleService.appendOutput(scanId, '\n[PASSIVE SIGNALS] Detecting exposures...');
-      await this.executePhase(scanId, target, ScanPhase.PASSIVE_SIGNALS, 'Detecting exposures');
+      try {
+        await this.executePhase(scanId, target, ScanPhase.PASSIVE_SIGNALS, 'Detecting exposures');
 
-      const passiveConfig = plan.phases.find(p => p.phase === ScanPhase.PASSIVE_SIGNALS);
-      if (passiveConfig) {
-        const passiveFindings = await scanOrchestratorService['executePassiveSignalsPhase'](
-          scanId,
-          target,
-          passiveConfig
-        );
-        consoleService.appendOutput(scanId, `[PASSIVE SIGNALS] Found ${passiveFindings} exposures`);
-        // Incrementally save passive findings to DB so they appear on the page
-        if (passiveFindings > 0 && assetId) {
-          await this.processPhaseResults(scanId, tenantId, assetId, 'passive');
+        const passiveConfig = plan.phases.find(p => p.phase === ScanPhase.PASSIVE_SIGNALS);
+        if (passiveConfig) {
+          const passiveFindings = await scanOrchestratorService['executePassiveSignalsPhase'](
+            scanId,
+            target,
+            passiveConfig
+          );
+          consoleService.appendOutput(scanId, `[PASSIVE SIGNALS] Found ${passiveFindings} exposures`);
+          if (passiveFindings > 0 && assetId) {
+            await this.processPhaseResults(scanId, tenantId, assetId, 'passive');
+          }
         }
+      } catch (passiveErr: any) {
+        logger.warn(`[ENTERPRISE-SCAN] ${scanId}: Passive phase failed, continuing: ${passiveErr.message}`);
+        consoleService.appendOutput(scanId, `[PASSIVE SIGNALS] Skipped due to error: ${passiveErr.message}`);
       }
 
       // Phase 2: Targeted Scan (AI-driven)
       consoleService.appendOutput(scanId, '\n[TARGETED SCAN] Running AI-powered context-aware security checks...');
-      await this.executePhase(scanId, target, ScanPhase.TARGETED_SCAN, 'Assessing vulnerabilities');
+      try {
+        await this.executePhase(scanId, target, ScanPhase.TARGETED_SCAN, 'Assessing vulnerabilities');
 
-      const targetedConfig = plan.phases.find(p => p.phase === ScanPhase.TARGETED_SCAN);
-      if (targetedConfig) {
-        const findings = await scanOrchestratorService['executeTargetedPhase'](
-          scanId,
-          target,
-          assetContext,
-          targetedConfig
-        );
+        const targetedConfig = plan.phases.find(p => p.phase === ScanPhase.TARGETED_SCAN);
+        if (targetedConfig) {
+          const findings = await scanOrchestratorService['executeTargetedPhase'](
+            scanId,
+            target,
+            assetContext,
+            targetedConfig
+          );
 
-        consoleService.appendOutput(scanId, `[TARGETED SCAN] Found ${findings} vulnerabilities`);
-        // Incrementally save targeted findings to DB so they appear on the page
-        if (findings > 0 && assetId) {
-          await this.processPhaseResults(scanId, tenantId, assetId, 'targeted');
+          consoleService.appendOutput(scanId, `[TARGETED SCAN] Found ${findings} vulnerabilities`);
+          if (findings > 0 && assetId) {
+            await this.processPhaseResults(scanId, tenantId, assetId, 'targeted');
+          }
         }
+      } catch (targetedErr: any) {
+        logger.warn(`[ENTERPRISE-SCAN] ${scanId}: Targeted phase failed, continuing: ${targetedErr.message}`);
+        consoleService.appendOutput(scanId, `[TARGETED SCAN] Skipped due to error: ${targetedErr.message}`);
       }
 
       // Phase 2.5: Baseline Hygiene (BALANCED and DEEP profiles only)
       const baselineConfig = plan.phases.find(p => p.phase === ScanPhase.BASELINE_HYGIENE);
       if (baselineConfig) {
-        consoleService.appendOutput(scanId, '\n[BASELINE HYGIENE] Running deterministic security checks...');
-        await this.executePhase(scanId, target, ScanPhase.BASELINE_HYGIENE, 'Checking security hygiene');
+        try {
+          consoleService.appendOutput(scanId, '\n[BASELINE HYGIENE] Running deterministic security checks...');
+          await this.executePhase(scanId, target, ScanPhase.BASELINE_HYGIENE, 'Checking security hygiene');
 
-        const baselineFindings = await scanOrchestratorService['executeBaselineHygienePhase'](
-          scanId,
-          target,
-          baselineConfig
-        );
-        consoleService.appendOutput(scanId, `[BASELINE HYGIENE] Found ${baselineFindings} issues`);
-        // Incrementally save baseline findings to DB so they appear on the page
-        if (baselineFindings > 0 && assetId) {
-          await this.processPhaseResults(scanId, tenantId, assetId, 'baseline');
+          const baselineFindings = await scanOrchestratorService['executeBaselineHygienePhase'](
+            scanId,
+            target,
+            baselineConfig
+          );
+          consoleService.appendOutput(scanId, `[BASELINE HYGIENE] Found ${baselineFindings} issues`);
+          if (baselineFindings > 0 && assetId) {
+            await this.processPhaseResults(scanId, tenantId, assetId, 'baseline');
+          }
+        } catch (baselineErr: any) {
+          logger.warn(`[ENTERPRISE-SCAN] ${scanId}: Baseline phase failed, continuing: ${baselineErr.message}`);
+          consoleService.appendOutput(scanId, `[BASELINE HYGIENE] Skipped due to error: ${baselineErr.message}`);
         }
       }
 

@@ -6,7 +6,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
 import { logger } from '../utils/logger';
-import jwt from 'jsonwebtoken';
+import { verifyToken } from '../utils/auth';
 import { parse } from 'url';
 
 interface AuthenticatedWebSocket extends WebSocket {
@@ -85,6 +85,12 @@ interface BulkScanCompletedMessage {
   timestamp: string;
 }
 
+interface ConnectionAckMessage {
+  type: 'connection_ack';
+  message: string;
+  timestamp: string;
+}
+
 type WebSocketMessage =
   | ScanProgressMessage
   | ScanStartedMessage
@@ -92,7 +98,8 @@ type WebSocketMessage =
   | NucleiOutputMessage
   | BulkScanProgressMessage
   | BulkScanStartedMessage
-  | BulkScanCompletedMessage;
+  | BulkScanCompletedMessage
+  | ConnectionAckMessage;
 
 export class WebSocketService {
   private wss: WebSocketServer | null = null;
@@ -124,19 +131,74 @@ export class WebSocketService {
   private handleConnection(ws: AuthenticatedWebSocket, req: any): void {
     logger.info('New WebSocket connection attempt');
 
-    // Authenticate the connection
-    const { query } = parse(req.url || '', true);
-    const token = query.token as string;
+    // 1. Cookie-based auth (httpOnly cookie sent automatically by browser on upgrade)
+    const cookieHeader = req.headers['cookie'] || '';
+    const cookieToken = cookieHeader
+      .split(';')
+      .map((c: string) => c.trim())
+      .find((c: string) => c.startsWith('token='))
+      ?.split('=')
+      .slice(1)
+      .join('=');
 
-    if (!token) {
-      logger.warn('WebSocket connection rejected: No token provided');
-      ws.close(1008, 'Authentication required');
-      return;
+    if (cookieToken) {
+      this.authenticateAndRegister(ws, cookieToken);
+    } else {
+      // 2. Fallback: URL query param (legacy) or first-message auth
+      const { query } = parse(req.url || '', true);
+      const urlToken = query.token as string;
+
+      if (urlToken) {
+        this.authenticateAndRegister(ws, urlToken);
+      } else {
+        // Wait for auth message
+        ws.isAlive = true;
+        const authTimeout = setTimeout(() => {
+          if (!ws.userId) {
+            logger.warn('WebSocket connection rejected: Auth timeout');
+            ws.close(1008, 'Authentication timeout');
+          }
+        }, 5000);
+
+        ws.once('message', (data: Buffer) => {
+          clearTimeout(authTimeout);
+          try {
+            const msg = JSON.parse(data.toString());
+            if (msg.type === 'auth' && msg.token) {
+              this.authenticateAndRegister(ws, msg.token);
+            } else {
+              ws.close(1008, 'First message must be auth');
+            }
+          } catch {
+            ws.close(1008, 'Invalid auth message');
+          }
+        });
+      }
     }
 
+    // Handle pong responses for heartbeat
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+
+    // Handle client disconnect
+    ws.on('close', () => {
+      this.handleDisconnect(ws);
+    });
+
+    // Handle errors
+    ws.on('error', (error) => {
+      logger.error('WebSocket error:', error);
+      this.handleDisconnect(ws);
+    });
+  }
+
+  /**
+   * Authenticate a WebSocket connection and register it
+   */
+  private authenticateAndRegister(ws: AuthenticatedWebSocket, token: string): void {
     try {
-      // Verify JWT token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-only-insecure-secret-change-me') as any;
+      const decoded = verifyToken(token);
       ws.userId = decoded.userId;
       ws.tenantId = decoded.tenantId;
       ws.isAlive = true;
@@ -151,30 +213,10 @@ export class WebSocketService {
 
       // Send welcome message
       this.sendToClient(ws, {
-        type: 'scan_progress',
-        scanId: 'system',
-        status: 'COMPLETED',
-        progress: 0,
+        type: 'connection_ack',
         message: 'Connected to real-time updates',
         timestamp: new Date().toISOString(),
       });
-
-      // Handle pong responses for heartbeat
-      ws.on('pong', () => {
-        ws.isAlive = true;
-      });
-
-      // Handle client disconnect
-      ws.on('close', () => {
-        this.handleDisconnect(ws);
-      });
-
-      // Handle errors
-      ws.on('error', (error) => {
-        logger.error('WebSocket error:', error);
-        this.handleDisconnect(ws);
-      });
-
     } catch (error: any) {
       logger.warn('WebSocket authentication failed:', error.message);
       ws.close(1008, 'Invalid token');

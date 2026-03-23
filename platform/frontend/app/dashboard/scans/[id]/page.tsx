@@ -3,9 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle, Wifi, WifiOff, Square } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { scansAPI } from '@/lib/api';
 import { useScanUpdates } from '@/hooks/useWebSocket';
-import EvidenceGraph from '@/components/EvidenceGraph';
+
+const EvidenceGraph = dynamic(() => import('@/components/EvidenceGraph'), {
+  ssr: false,
+  loading: () => <div className="h-64 flex items-center justify-center text-gray-500">Loading graph...</div>,
+});
 
 interface Vulnerability {
   id: string;

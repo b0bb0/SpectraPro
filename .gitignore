@@ -64,9 +64,8 @@ coverage/
 .nyc_output/
 htmlcov/
 
-# Prisma
-platform/backend/prisma/migrations/
-platform/prisma/migrations/
+# Prisma — migrations MUST be committed for deploy to work
+# platform/backend/prisma/migrations/  ← DO NOT IGNORE
 
 # Cloudflare Tunnel credentials (NEVER commit)
 cloudflared/credentials.json

@@ -921,6 +921,8 @@ export class ReconService {
     try {
       // Determine wordlist path (try common locations)
       const wordlistPaths = [
+        '/usr/share/wordlists/raft-medium-directories.txt',
+        '/usr/share/wordlists/common.txt',
         path.join(os.homedir(), 'SecLists/Discovery/Web-Content/raft-medium-directories.txt'),
         '/opt/SecLists/Discovery/Web-Content/raft-medium-directories.txt',
         '/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt',
@@ -1739,6 +1741,8 @@ export class ReconService {
     // Determine wordlist
     const wordlistPaths = [
       options?.wordlist,
+      '/usr/share/wordlists/raft-medium-directories.txt',
+      '/usr/share/wordlists/common.txt',
       path.join(os.homedir(), 'SecLists/Discovery/Web-Content/raft-medium-directories.txt'),
       '/opt/SecLists/Discovery/Web-Content/raft-medium-directories.txt',
       '/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt',
@@ -1755,17 +1759,17 @@ export class ReconService {
     }
 
     if (!wordlist) {
-      const error = new Error('No wordlist found for Feroxbuster');
+      logger.warn('No wordlist found for Feroxbuster. Skipping directory enumeration.');
       await prisma.recon_phase_runs.update({
         where: { id: phaseRun.id },
         data: {
-          status: 'FAILED',
+          status: 'DONE',
           finishedAt: new Date(),
-          errorMessage: error.message,
+          errorMessage: 'Skipped: no wordlist available',
           updatedAt: new Date(),
         },
       });
-      throw error;
+      return;
     }
 
     try {
@@ -1873,9 +1877,24 @@ export class ReconService {
 
       logger.info(`Feroxbuster completed: ${endpoints.length} endpoints found`);
     } catch (error: any) {
-      logger.error(`Feroxbuster failed:`, error);
-
       await fs.unlink(outputFile).catch(() => {});
+
+      // Gracefully skip if Feroxbuster is not installed
+      if (error.message?.includes('ENOENT') || error.message?.includes('command not found') || error.code === 'ENOENT') {
+        logger.warn('Feroxbuster is not installed. Skipping directory enumeration.');
+        await prisma.recon_phase_runs.update({
+          where: { id: phaseRun.id },
+          data: {
+            status: 'DONE',
+            finishedAt: new Date(),
+            errorMessage: 'Skipped: feroxbuster not installed',
+            updatedAt: new Date(),
+          },
+        });
+        return;
+      }
+
+      logger.error(`Feroxbuster failed:`, error);
 
       await prisma.recon_phase_runs.update({
         where: { id: phaseRun.id },

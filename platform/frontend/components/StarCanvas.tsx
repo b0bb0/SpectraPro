@@ -11,10 +11,16 @@ export default function StarCanvas() {
     const X = C.getContext('2d')
     if (!X) return
 
+    // Respect reduced-motion preference
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
     let W = 0, H = 0
     let stars: Array<{ x: number; y: number; r: number; a: number; s: number }> = []
     let nebulae: Array<{ x: number; y: number; r: number; h: number; a: number }> = []
     let t = 0, raf = 0
+    let lastFrame = 0
+    const TARGET_FPS = prefersReduced ? 10 : 24 // No need for 60fps on a background
+    const FRAME_INTERVAL = 1000 / TARGET_FPS
 
     const resize = () => {
       W = C.width = window.innerWidth
@@ -23,14 +29,15 @@ export default function StarCanvas() {
     }
 
     const init = () => {
-      stars = Array.from({ length: 220 }, () => ({
+      const count = Math.min(180, Math.floor((W * H) / 8000)) // Scale with viewport
+      stars = Array.from({ length: count }, () => ({
         x: Math.random() * W,
         y: Math.random() * H,
         r: Math.random() * 1.5 + 0.3,
         a: Math.random(),
         s: Math.random() * 0.008 + 0.002,
       }))
-      nebulae = Array.from({ length: 4 }, () => ({
+      nebulae = Array.from({ length: 3 }, () => ({
         x: Math.random() * W,
         y: Math.random() * H,
         r: Math.random() * 200 + 120,
@@ -39,7 +46,13 @@ export default function StarCanvas() {
       }))
     }
 
-    const draw = () => {
+    const draw = (now: number) => {
+      raf = requestAnimationFrame(draw)
+
+      // Throttle to target FPS
+      if (now - lastFrame < FRAME_INTERVAL) return
+      lastFrame = now
+
       X.clearRect(0, 0, W, H)
 
       // Nebulae
@@ -51,25 +64,38 @@ export default function StarCanvas() {
         X.fillRect(n.x - n.r, n.y - n.r, n.r * 2, n.r * 2)
       }
 
-      // Stars
+      // Stars — batch into single path for performance
+      X.beginPath()
       for (const s of stars) {
-        const twinkle = 0.4 + 0.6 * Math.sin(t * s.s * 6 + s.a * 100)
-        X.beginPath()
+        const twinkle = prefersReduced
+          ? 0.7
+          : 0.4 + 0.6 * Math.sin(t * s.s * 6 + s.a * 100)
+        X.moveTo(s.x + s.r, s.y)
         X.arc(s.x, s.y, s.r, 0, Math.PI * 2)
-        X.fillStyle = `rgba(230,220,255,${twinkle * 0.8})`
-        X.fill()
       }
+      X.fillStyle = 'rgba(230,220,255,0.55)'
+      X.fill()
 
       t++
-      raf = requestAnimationFrame(draw)
+    }
+
+    // Pause when tab is hidden
+    const handleVisibility = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(raf)
+      } else {
+        raf = requestAnimationFrame(draw)
+      }
     }
 
     window.addEventListener('resize', resize)
+    document.addEventListener('visibilitychange', handleVisibility)
     resize()
-    draw()
+    raf = requestAnimationFrame(draw)
 
     return () => {
       window.removeEventListener('resize', resize)
+      document.removeEventListener('visibilitychange', handleVisibility)
       cancelAnimationFrame(raf)
     }
   }, [])
@@ -78,6 +104,7 @@ export default function StarCanvas() {
     <canvas
       ref={ref}
       id="cosmos"
+      aria-hidden="true"
       style={{
         position: 'fixed',
         inset: 0,

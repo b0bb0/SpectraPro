@@ -4,12 +4,14 @@
 
 # ── Stage 1: Install dependencies ──────────────────────────────────
 FROM node:20-alpine AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 
 # ── Stage 2: Build Next.js app ─────────────────────────────────────
 FROM node:20-alpine AS builder
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Build-time env vars (passed via docker-compose build args)

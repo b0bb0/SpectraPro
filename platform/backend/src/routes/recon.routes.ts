@@ -110,32 +110,58 @@ router.get('/assets/status', async (req, res, next) => {
       ORDER BY rs."assetId", rs."startedAt" DESC
     `;
 
-    // For each latest session, count total sessions and completed phases
-    const statusMap: Record<string, any> = {};
-    await Promise.all(
-      latestSessions.map(async (s) => {
-        const [sessionCount, phaseRuns] = await Promise.all([
-          prisma.recon_sessions.count({ where: { assetId: s.assetId, tenantId } }),
-          prisma.recon_phase_runs.findMany({
-            where: { sessionId: s.id },
-            select: { phase: true, status: true },
-          }),
-        ]);
-        const completedPhases = phaseRuns.filter((p: any) => p.status === 'DONE').length;
-        const totalPhases = phaseRuns.length;
-        const hasRunning = phaseRuns.some((p: any) => p.status === 'RUNNING');
+    if (latestSessions.length === 0) {
+      return res.json({ success: true, data: {} });
+    }
 
-        statusMap[s.assetId] = {
-          latestSessionId: s.id,
-          latestStatus: s.status,
-          lastScannedAt: s.startedAt,
-          sessionCount,
-          completedPhases,
-          totalPhases,
-          hasRunning,
-        };
-      })
-    );
+    const assetIds = latestSessions.map((s) => s.assetId);
+    const sessionIds = latestSessions.map((s) => s.id);
+
+    // Batch: count total sessions per asset and fetch all phase runs in 2 queries
+    const [sessionCounts, allPhaseRuns] = await Promise.all([
+      prisma.recon_sessions.groupBy({
+        by: ['assetId'],
+        where: { assetId: { in: assetIds }, tenantId },
+        _count: true,
+      }),
+      prisma.recon_phase_runs.findMany({
+        where: { sessionId: { in: sessionIds } },
+        select: { sessionId: true, phase: true, status: true },
+      }),
+    ]);
+
+    // Index batch results for O(1) lookups
+    const countByAsset: Record<string, number> = {};
+    for (const row of sessionCounts) {
+      countByAsset[row.assetId] = row._count;
+    }
+
+    const phaseRunsBySession: Record<string, { phase: string; status: string }[]> = {};
+    for (const pr of allPhaseRuns) {
+      if (!phaseRunsBySession[pr.sessionId]) {
+        phaseRunsBySession[pr.sessionId] = [];
+      }
+      phaseRunsBySession[pr.sessionId].push(pr);
+    }
+
+    // Build the response map without any additional queries
+    const statusMap: Record<string, any> = {};
+    for (const s of latestSessions) {
+      const phaseRuns = phaseRunsBySession[s.id] || [];
+      const completedPhases = phaseRuns.filter((p) => p.status === 'DONE').length;
+      const totalPhases = phaseRuns.length;
+      const hasRunning = phaseRuns.some((p) => p.status === 'RUNNING');
+
+      statusMap[s.assetId] = {
+        latestSessionId: s.id,
+        latestStatus: s.status,
+        lastScannedAt: s.startedAt,
+        sessionCount: countByAsset[s.assetId] || 0,
+        completedPhases,
+        totalPhases,
+        hasRunning,
+      };
+    }
 
     res.json({ success: true, data: statusMap });
   } catch (error: any) {
@@ -755,8 +781,26 @@ router.get('/screenshot/:artifactId', async (req, res, next) => {
       });
     }
 
+    // Validate path is within expected directories to prevent path traversal
+    const path = require('path');
+    const resolvedPath = path.resolve(artifact.storagePath);
+    const allowedDirs = [
+      path.resolve('/data'),
+      path.resolve('/frontend/public/screenshots'),
+      path.resolve('/app/data'),
+      path.resolve(process.cwd(), 'data'),
+    ];
+    const isAllowed = allowedDirs.some(dir => resolvedPath.startsWith(dir));
+    if (!isAllowed) {
+      logger.warn(`Blocked file access outside allowed directories: ${resolvedPath}`);
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'Access denied' },
+      });
+    }
+
     // Serve the image file
-    res.sendFile(artifact.storagePath);
+    res.sendFile(resolvedPath);
   } catch (error: any) {
     logger.error('Failed to serve screenshot:', error);
     next(error);

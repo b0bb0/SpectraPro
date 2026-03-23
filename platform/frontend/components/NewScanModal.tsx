@@ -133,7 +133,7 @@ export default function NewScanModal({ isOpen, onClose, onScanStarted }: NewScan
 
       {/* Modal */}
       <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-        <div className="glass rounded-2xl p-8 shadow-card-hover animate-slide-up">
+        <div className="glass rounded-2xl p-8 shadow-card animate-slide-up">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">

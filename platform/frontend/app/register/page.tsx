@@ -269,7 +269,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full btn-premium py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full btn-premium py-3 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? (
                 <>
@@ -285,7 +285,7 @@ export default function RegisterPage() {
           {/* Sign In Link */}
           <div className="mt-6 text-center text-sm text-text-secondary">
             Already have an account?{' '}
-            <Link href="/login" className="text-primary hover:text-primary/80 font-semibold transition-colors">
+            <Link href="/login" className="font-semibold transition-colors" style={{ color: '#9d5fff' }}>
               Sign in
             </Link>
           </div>

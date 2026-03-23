@@ -22,7 +22,7 @@ if [[ -z "$SSH_PUBKEY" ]]; then
   exit 1
 fi
 
-REPO_URL="${2:-https://github.com/b0bb0/Migrate-spectrapro.git}"
+REPO_URL="${2:-https://github.com/b0bb0/SpectraPro.git}"
 DEPLOY_USER="deploy"
 APP_DIR="/opt/spectra"
 

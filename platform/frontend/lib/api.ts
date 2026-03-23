@@ -85,6 +85,12 @@ async function fetchAPI<T = any>(
   }
 }
 
+/**
+ * SWR fetcher — pass as the fetcher to useSWR for automatic caching/revalidation
+ * Usage: useSWR('/api/scans', swrFetcher)
+ */
+export const swrFetcher = <T = any>(endpoint: string) => fetchAPI<T>(endpoint);
+
 async function fetchAPIWithMeta<T = any>(
   endpoint: string,
   options: RequestInit = {}

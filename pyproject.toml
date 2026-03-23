@@ -12,13 +12,17 @@ requires-python = ">=3.10"
 dependencies = [
     "flask>=3.0.0",
     "flask-cors>=4.0.0",
-    "requests>=2.31.0",
+    "requests>=2.32.5,<3",
     "pyyaml>=6.0.1",
     "python-dateutil>=2.8.2",
-    "tqdm>=4.66.2",
+    "tqdm>=4.67.1",
     "gunicorn>=21.2.0",
-    "playwright>=1.40.0",
+    "playwright>=1.57.0",
     "scrapegraphai>=1.73.0",
+    "langsmith>=0.4.8,<0.5",
+    "langchain==1.2.10",
+    "langchain-classic==1.0.1",
+    "langchain-community==0.4.1",
 ]
 
 [project.optional-dependencies]

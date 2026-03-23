@@ -12,16 +12,12 @@ export class DashboardService {
   async getMetrics(tenantId: string, timeRange: string) {
     const { startDate } = this.getTimeRangeFilter(timeRange);
 
-    // Get current metrics
+    // Get current metrics — use groupBy to collapse severity counts into 1 query
     const [
       totalAssets,
       totalVulnerabilities,
-      openVulnerabilities,
       criticalAssets,
-      criticalVulns,
-      highVulns,
-      mediumVulns,
-      lowVulns,
+      severityGroups,
       recentVulns,
       mitigatedVulns,
     ] = await Promise.all([
@@ -35,14 +31,6 @@ export class DashboardService {
         where: { tenantId },
       }),
 
-      // Open vulnerabilities
-      prisma.vulnerabilities.count({
-        where: {
-          tenantId,
-          status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED'] },
-        },
-      }),
-
       // Assets with critical risk
       prisma.assets.count({
         where: {
@@ -52,40 +40,14 @@ export class DashboardService {
         },
       }),
 
-      // Critical vulnerabilities
-      prisma.vulnerabilities.count({
+      // Single groupBy replaces 5 separate count queries (open + 4 severity counts)
+      prisma.vulnerabilities.groupBy({
+        by: ['severity'],
         where: {
           tenantId,
-          severity: 'CRITICAL',
           status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED'] },
         },
-      }),
-
-      // High vulnerabilities
-      prisma.vulnerabilities.count({
-        where: {
-          tenantId,
-          severity: 'HIGH',
-          status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED'] },
-        },
-      }),
-
-      // Medium vulnerabilities
-      prisma.vulnerabilities.count({
-        where: {
-          tenantId,
-          severity: 'MEDIUM',
-          status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED'] },
-        },
-      }),
-
-      // Low vulnerabilities
-      prisma.vulnerabilities.count({
-        where: {
-          tenantId,
-          severity: { in: ['LOW', 'INFO'] },
-          status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED'] },
-        },
+        _count: true,
       }),
 
       // Newly discovered in time range
@@ -105,6 +67,17 @@ export class DashboardService {
         },
       }),
     ]);
+
+    // Derive individual severity counts and open total from the single groupBy result
+    const severityMap: Record<string, number> = {};
+    for (const group of severityGroups) {
+      severityMap[group.severity] = group._count;
+    }
+    const criticalVulns = severityMap['CRITICAL'] || 0;
+    const highVulns = severityMap['HIGH'] || 0;
+    const mediumVulns = severityMap['MEDIUM'] || 0;
+    const lowVulns = (severityMap['LOW'] || 0) + (severityMap['INFO'] || 0);
+    const openVulnerabilities = criticalVulns + highVulns + mediumVulns + lowVulns;
 
     // Calculate risk score (0-100)
     const riskScore = this.calculateRiskScore(

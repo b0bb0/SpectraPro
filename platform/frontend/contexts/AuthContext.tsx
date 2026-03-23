@@ -49,6 +49,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await authAPI.me();
       setUser(userData);
     } catch (error) {
+      // Clear the invalid/expired httpOnly cookie so middleware
+      // won't keep redirecting authenticated-looking requests
+      try {
+        await authAPI.logout();
+      } catch {
+        // Ignore — cookie may already be gone
+      }
       setUser(null);
     } finally {
       setLoading(false);

@@ -186,6 +186,7 @@ export default function ChangeIntelligenceDashboard({ assetId, scanId }: ChangeI
           value={filterType}
           onChange={(e) => setFilterType(e.target.value)}
           className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          aria-label="Filter by change type"
         >
           <option value="ALL">All Changes</option>
           <option value="NEW_PARAMETERS">New Parameters</option>

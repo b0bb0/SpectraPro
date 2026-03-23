@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import useSWR from 'swr'
 import {
   Shield,
   AlertTriangle,
@@ -33,6 +34,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { dashboardAPI } from '@/lib/api'
+import { getSeverityHex, getScanStatusHex } from '@/lib/colors'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface DashboardMetrics {
@@ -103,35 +105,36 @@ export default function DashboardPage() {
   const router = useRouter()
   const { user } = useAuth()
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d')
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null)
-  const [riskTrend, setRiskTrend] = useState<RiskTrendData[]>([])
-  const [assetsByCategory, setAssetsByCategory] = useState<AssetsByCategory | null>(null)
-  const [topVulnerabilities, setTopVulnerabilities] = useState<TopVulnerability[]>([])
-  const [recentScans, setRecentScans] = useState<RecentScan[]>([])
-  const [loading, setLoading] = useState(true)
   const [showScanModal, setShowScanModal] = useState(false)
 
-  useEffect(() => { loadDashboardData() }, [timeRange])
-
-  const loadDashboardData = async () => {
-    try {
-      setLoading(true)
-      const [metricsData, trendData, assetsData, topVulnsData, scansData] = await Promise.all([
-        dashboardAPI.getMetrics(timeRange),
-        dashboardAPI.getRiskTrend(timeRange),
-        dashboardAPI.getAssetsByCategory(),
-        dashboardAPI.getTopVulnerabilities(5),
-        dashboardAPI.getRecentScans(4),
-      ])
-      setMetrics(metricsData)
-      setRiskTrend(trendData)
-      setAssetsByCategory(assetsData)
-      setTopVulnerabilities(topVulnsData)
-      setRecentScans(scansData)
-    } catch (error) {
-      console.error('Failed to load dashboard data:', error)
-    } finally { setLoading(false) }
-  }
+  // SWR: auto-caching, revalidation on focus, deduplication
+  const swrOpts = { revalidateOnFocus: true, dedupingInterval: 5000 }
+  const { data: metrics, isLoading: metricsLoading } = useSWR<DashboardMetrics>(
+    `/api/dashboard/metrics?range=${timeRange}`,
+    (url: string) => dashboardAPI.getMetrics(timeRange),
+    swrOpts
+  )
+  const { data: riskTrend = [] } = useSWR<RiskTrendData[]>(
+    `/api/dashboard/risk-trend?range=${timeRange}`,
+    () => dashboardAPI.getRiskTrend(timeRange),
+    swrOpts
+  )
+  const { data: assetsByCategory } = useSWR<AssetsByCategory>(
+    '/api/dashboard/assets-by-category',
+    () => dashboardAPI.getAssetsByCategory(),
+    swrOpts
+  )
+  const { data: topVulnerabilities = [] } = useSWR<TopVulnerability[]>(
+    '/api/dashboard/top-vulnerabilities?limit=5',
+    () => dashboardAPI.getTopVulnerabilities(5),
+    swrOpts
+  )
+  const { data: recentScans = [] } = useSWR<RecentScan[]>(
+    '/api/dashboard/recent-scans?limit=4',
+    () => dashboardAPI.getRecentScans(4),
+    swrOpts
+  )
+  const loading = metricsLoading
 
   const handleScanStarted = (scanId: string) => {
     setShowScanModal(false)
@@ -172,15 +175,9 @@ export default function DashboardPage() {
     return `${Math.floor(hours / 24)}d ago`
   }
 
-  const getSeverityColor = (s: string) => {
-    const map: Record<string, string> = { CRITICAL: '#ff6b6b', HIGH: '#f0b840', MEDIUM: '#c8a0ff', LOW: '#60a5fa' }
-    return map[s] || '#8878a9'
-  }
-
-  const getScanStatusColor = (s: string) => {
-    const map: Record<string, string> = { COMPLETED: '#4ade80', RUNNING: '#60a5fa', FAILED: '#ff6b6b' }
-    return map[s] || '#8878a9'
-  }
+  // Hex colors for inline styles / charts — sourced from @/lib/colors
+  const severityHex = (s: string) => getSeverityHex(s)
+  const scanStatusHex = (s: string) => getScanStatusHex(s)
 
   // KPI Card component
   const KPICard = ({ icon: Icon, value, label, trend, trendDir, iconColor }: any) => (
@@ -410,9 +407,9 @@ export default function DashboardPage() {
                 <div className="flex items-start space-x-4 flex-1">
                   <div
                     className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: `${getSeverityColor(vuln.severity)}12`, border: `1px solid ${getSeverityColor(vuln.severity)}30` }}
+                    style={{ background: `${severityHex(vuln.severity)}12`, border: `1px solid ${severityHex(vuln.severity)}30` }}
                   >
-                    <AlertTriangle className="w-5 h-5" style={{ color: getSeverityColor(vuln.severity) }} />
+                    <AlertTriangle className="w-5 h-5" style={{ color: severityHex(vuln.severity) }} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-medium mb-1 line-clamp-1" style={{ color: '#e0d6f6' }}>
@@ -434,15 +431,15 @@ export default function DashboardPage() {
                   {vuln.cvssScore && (
                     <div className="text-right">
                       <div className="text-[10px] font-mono" style={{ color: '#6b5f8a' }}>CVSS</div>
-                      <div className="text-lg font-bold font-mono" style={{ color: getSeverityColor(vuln.severity) }}>{vuln.cvssScore.toFixed(1)}</div>
+                      <div className="text-lg font-bold font-mono" style={{ color: severityHex(vuln.severity) }}>{vuln.cvssScore.toFixed(1)}</div>
                     </div>
                   )}
                   <span
                     className="cosmic-pill"
                     style={{
-                      background: `${getSeverityColor(vuln.severity)}15`,
-                      color: getSeverityColor(vuln.severity),
-                      border: `1px solid ${getSeverityColor(vuln.severity)}30`,
+                      background: `${severityHex(vuln.severity)}15`,
+                      color: severityHex(vuln.severity),
+                      border: `1px solid ${severityHex(vuln.severity)}30`,
                     }}
                   >
                     {vuln.severity}
@@ -485,16 +482,16 @@ export default function DashboardPage() {
                 >
                   <div
                     className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: `${getScanStatusColor(scan.status)}12`, border: `1px solid ${getScanStatusColor(scan.status)}25` }}
+                    style={{ background: `${scanStatusHex(scan.status)}12`, border: `1px solid ${scanStatusHex(scan.status)}25` }}
                   >
-                    <Activity className="w-4 h-4" style={{ color: getScanStatusColor(scan.status) }} />
+                    <Activity className="w-4 h-4" style={{ color: scanStatusHex(scan.status) }} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-sm font-medium truncate" style={{ color: '#e0d6f6' }}>{scan.assets?.name || 'Unknown'}</p>
                       <span
                         className="cosmic-pill text-[10px]"
-                        style={{ background: `${getScanStatusColor(scan.status)}15`, color: getScanStatusColor(scan.status), border: `1px solid ${getScanStatusColor(scan.status)}30` }}
+                        style={{ background: `${scanStatusHex(scan.status)}15`, color: scanStatusHex(scan.status), border: `1px solid ${scanStatusHex(scan.status)}30` }}
                       >
                         {scan.status}
                       </span>
