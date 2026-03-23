@@ -17,6 +17,9 @@ jobs:
 
     - name: Validate Docker Compose configuration
       run: docker compose config --quiet
+      env:
+        POSTGRES_PASSWORD: ci-placeholder
+        JWT_SECRET: ci-placeholder
 
     - name: Build backend image
       run: docker build ./platform/backend --tag spectra-backend:${{ github.sha }}
