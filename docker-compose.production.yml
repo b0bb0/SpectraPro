@@ -1,0 +1,118 @@
+# ── Spectra Platform — Live Server Docker Compose ────────────────────
+# Uses pre-built images from GitHub Container Registry (GHCR).
+# Images are built and pushed by the CI workflow on every push to main.
+#
+# Usage:
+#   1. cp .env.production .env && nano .env   (fill in secrets)
+#   2. docker compose -f docker-compose.production.yml up -d
+#   3. docker compose -f docker-compose.production.yml exec backend npx prisma migrate deploy
+#   4. docker compose -f docker-compose.production.yml exec backend npx prisma db seed  (optional)
+# ─────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Reverse Proxy (HTTPS via Let's Encrypt) ─────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.production:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - spectra
+
+  # ── PostgreSQL ───────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-spectra_platform}
+      POSTGRES_USER: ${POSTGRES_USER:-spectra}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-spectra} -d ${POSTGRES_DB:-spectra_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - spectra
+
+  # ── Backend API ──────────────────────────────────────────────────
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/b0bb0/spectrapro-backend:latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-spectra}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-spectra_platform}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      FRONTEND_URL: ${FRONTEND_URL:-https://spectrapro.ai}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      OLLAMA_API_URL: ${OLLAMA_API_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-120000}
+      AI_ANALYSIS_ENABLED: ${AI_ANALYSIS_ENABLED:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - spectra
+
+  # ── Frontend ─────────────────────────────────────────────────────
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/b0bb0/spectrapro-frontend:latest}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    networks:
+      - spectra
+
+  # ── Python Scanner API ──────────────────────────────────────────
+  scanner:
+    image: ${SCANNER_IMAGE:-ghcr.io/b0bb0/spectrapro-scanner:latest}
+    restart: unless-stopped
+    volumes:
+      - scanner_data:/app/data
+      - ./config:/app/config:ro
+      - nuclei_templates:/root/.local/nuclei-templates
+    environment:
+      SPECTRA_API_KEY: ${SPECTRA_API_KEY:-}
+      OLLAMA_API_URL: ${OLLAMA_API_URL:-}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
+    networks:
+      - spectra
+
+  # ── Ollama (optional — start with: docker compose --profile ai up) ──
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ai"]
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - spectra
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+  scanner_data:
+  nuclei_templates:
+  ollama_models:
+
+networks:
+  spectra:
+    driver: bridge
