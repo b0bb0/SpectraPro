@@ -1,0 +1,31 @@
+# Render Blueprint — SpectraPRO Backend
+# Deploy: https://render.com/deploy?repo=https://github.com/b0bb0/SpectraPro&branch=codex/deploy-app-to-cloudflare-pages
+services:
+  - type: web
+    name: spectrapro-backend
+    runtime: docker
+    dockerfilePath: platform/backend/Dockerfile
+    dockerContext: platform/backend
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: spectrapro-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "5001"
+      - key: FRONTEND_URL
+        value: https://frontend-pi-sooty-54.vercel.app
+      - key: FRONTEND_URLS
+        value: https://frontend-pi-sooty-54.vercel.app
+    healthCheckPath: /health
+    plan: starter
+
+databases:
+  - name: spectrapro-db
+    plan: starter
+    databaseName: spectra_platform
+    postgresMajorVersion: "16"
