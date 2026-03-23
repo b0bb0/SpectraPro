@@ -14,5 +14,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+
+    - name: Validate Docker Compose configuration
+      run: docker compose config --quiet
+
+    - name: Build backend image
+      run: docker build ./platform/backend --tag spectra-backend:${{ github.sha }}
+
+    - name: Build frontend image
+      run: docker build ./platform/frontend --tag spectra-frontend:${{ github.sha }}
+
+    - name: Build scanner image
+      run: docker build . --file Dockerfile.scanner --tag spectra-scanner:${{ github.sha }}
