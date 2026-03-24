@@ -30,7 +30,7 @@ interface Scan {
   status: string;
   startedAt: string;
   completedAt?: string;
-  progress: number;
+  progress?: number;
   currentPhase?: string;
   templatesTotal?: number;
   templatesRun?: number;

@@ -2,22 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { FileText, Download, Plus, CheckCircle, X, Loader2, AlertTriangle, FileDown } from 'lucide-react';
-import { API_URL, scansAPI, reportsAPI } from '@/lib/api';
-
-interface Scan {
-  id: string;
-  name: string;
-  type: string;
-  status: string;
-  vulnFound: number;
-  criticalCount: number;
-  highCount: number;
-  mediumCount: number;
-  lowCount: number;
-  infoCount: number;
-  createdAt: string;
-  completedAt?: string;
-}
+import { API_URL, scansAPI, reportsAPI, type ScanSummary as Scan } from '@/lib/api';
 
 interface GeneratedReport {
   id: string;
@@ -413,7 +398,7 @@ export default function ReportsPage() {
                             <div className="flex-1">
                               <p className="text-white font-medium">{scan.name}</p>
                               <p className="text-sm text-gray-400">
-                                {formatDate(scan.completedAt || scan.createdAt)} • {scan.vulnFound} findings
+                                {formatDate(scan.completedAt || scan.startedAt)} • {scan.vulnFound} findings
                               </p>
                             </div>
                           </div>
