@@ -33,50 +33,17 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import { dashboardAPI } from '@/lib/api'
+import {
+  dashboardAPI,
+  type DashboardMetrics,
+  type RiskTrendPoint as RiskTrendData,
+  type AssetsByCategory,
+  type TopVulnerability,
+  type RecentScan,
+} from '@/lib/api'
 import { getSeverityHex, getScanStatusHex } from '@/lib/colors'
 import { useAuth } from '@/contexts/AuthContext'
 
-interface DashboardMetrics {
-  totalAssets: number
-  totalVulnerabilities: number
-  openVulnerabilities: number
-  criticalAssets: number
-  newVulnerabilities: number
-  mitigatedVulnerabilities: number
-  riskScore: number
-  severityCounts: {
-    critical: number
-    high: number
-    medium: number
-    low: number
-  }
-  trends: {
-    vulnerabilities: { value: number; direction: 'up' | 'down' | 'stable' }
-    critical: { value: number; direction: 'up' | 'down' | 'stable' }
-  }
-  timeRange: string
-}
-
-interface AssetsByCategory {
-  byType: Array<{ category: string; count: number }>
-  byEnvironment: Array<{ category: string; count: number }>
-  byCriticality: Array<{ category: string; count: number }>
-}
-
-interface TopVulnerability {
-  id: string; title: string; severity: string; cvssScore: number | null
-  cveId: string | null; status: string; firstSeen: Date
-  asset: { id: string; name: string; type: string }
-}
-
-interface RecentScan {
-  id: string; status: string; scanProfile: string
-  createdAt: Date; completedAt: Date | null
-  assets: { id: string; name: string }
-}
-
-interface RiskTrendData { date: string; critical: number; high: number; medium: number; low: number }
 interface SeverityData { name: string; value: number; color: string }
 
 // Cosmic chart colors
@@ -109,7 +76,7 @@ export default function DashboardPage() {
 
   // SWR: auto-caching, revalidation on focus, deduplication
   const swrOpts = { revalidateOnFocus: true, dedupingInterval: 5000 }
-  const { data: metrics, isLoading: metricsLoading } = useSWR<DashboardMetrics>(
+  const { data: metrics, isLoading: metricsLoading, error: metricsError, mutate: mutateMetrics } = useSWR<DashboardMetrics>(
     `/api/dashboard/metrics?range=${timeRange}`,
     (url: string) => dashboardAPI.getMetrics(timeRange),
     swrOpts
@@ -141,6 +108,27 @@ export default function DashboardPage() {
     router.push('/dashboard/scans')
   }
 
+  if (metricsError) {
+    return (
+      <div className="p-8">
+        <div className="cosmic-panel p-8 text-center" role="alert">
+          <AlertCircle className="w-12 h-12 mx-auto mb-4" style={{ color: '#ff6b6b' }} />
+          <h2 className="text-xl font-semibold mb-2" style={{ color: '#e0d6f6' }}>Failed to load dashboard</h2>
+          <p className="text-sm mb-6" style={{ color: '#8878a9' }}>
+            Unable to fetch metrics. The server may be unavailable.
+          </p>
+          <button
+            onClick={() => mutateMetrics()}
+            className="btn-premium px-6 py-2 text-sm inline-flex items-center space-x-2"
+          >
+            <Activity className="w-4 h-4" />
+            <span>Retry</span>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (loading || !metrics) {
     return (
       <div className="p-8">
@@ -165,7 +153,7 @@ export default function DashboardPage() {
 
   const riskScore = metrics.riskScore
 
-  const timeAgo = (date: Date) => {
+  const timeAgo = (date: string | Date) => {
     const seconds = Math.floor((new Date().getTime() - new Date(date).getTime()) / 1000)
     if (seconds < 60) return 'just now'
     const minutes = Math.floor(seconds / 60)

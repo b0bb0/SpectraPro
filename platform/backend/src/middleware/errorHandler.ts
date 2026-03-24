@@ -33,6 +33,8 @@ export function errorHandler(
     ip: req.ip,
   });
 
+  const isProduction = process.env.NODE_ENV === 'production';
+
   // Handle custom AppError
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
@@ -40,7 +42,8 @@ export function errorHandler(
       error: {
         code: err.code,
         message: err.message,
-        details: err.details,
+        // Only include details in non-production environments to avoid leaking internals
+        ...(!isProduction && err.details != null && { details: err.details }),
       },
     });
     return;
@@ -53,7 +56,9 @@ export function errorHandler(
       error: {
         code: 'VALIDATION_ERROR',
         message: 'Invalid request data',
-        details: err.errors,
+        // Zod validation details are safe to show (field names, constraints)
+        // but omit in production to avoid revealing schema structure
+        ...(!isProduction && { details: err.errors }),
       },
     });
     return;
@@ -67,7 +72,8 @@ export function errorHandler(
         error: {
           code: 'CONFLICT',
           message: 'Resource already exists',
-          details: err.meta,
+          // err.meta contains table/column names — never expose in production
+          ...(!isProduction && { details: err.meta }),
         },
       });
       return;
@@ -91,7 +97,7 @@ export function errorHandler(
     error: {
       code: 'INTERNAL_ERROR',
       message: 'An unexpected error occurred',
-      ...(process.env.NODE_ENV === 'development' && { details: err.message }),
+      ...(!isProduction && { details: err.message }),
     },
   });
 }

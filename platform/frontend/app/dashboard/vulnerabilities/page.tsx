@@ -20,7 +20,7 @@ import {
   CheckCircle2,
   ShieldCheck,
 } from 'lucide-react'
-import { vulnerabilitiesAPI } from '@/lib/api'
+import { vulnerabilitiesAPI, getErrorMessage } from '@/lib/api'
 import { getSeverityColor, getStatusColor } from '@/lib/colors'
 
 interface Asset {
@@ -114,7 +114,7 @@ export default function VulnerabilitiesPage() {
       setVulnerabilities(response.data || [])
       setTotal(response.meta?.total || 0)
       setError('')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to load vulnerabilities:', err)
       // Secure error handling - generic user message only
       setError('Unable to load vulnerabilities. Please try again.')
@@ -204,9 +204,9 @@ export default function VulnerabilitiesPage() {
         prev.map((v) => (v.id === vulnId ? { ...v, status: newStatus } : v))
       )
       setStatusDropdownOpen(null)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to update vulnerability status:', err)
-      setError('Failed to update status. Please try again.')
+      setError(getErrorMessage(err, 'Failed to update status. Please try again.'))
     } finally {
       setUpdatingStatus(null)
     }

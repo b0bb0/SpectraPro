@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle, Wifi, WifiOff, Square } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { scansAPI } from '@/lib/api';
+import { scansAPI, getErrorMessage } from '@/lib/api';
 import { useScanUpdates } from '@/hooks/useWebSocket';
 
 const EvidenceGraph = dynamic(() => import('@/components/EvidenceGraph'), {
@@ -72,8 +72,8 @@ export default function ScanDetailsPage({ params }: { params: { id: string } }) 
       setScan(data);
       prevVulnFoundRef.current = data.vulnFound || 0;
       setError('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to load scan details');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to load scan details'));
       setScan(null);
     } finally {
       setLoading(false);
@@ -130,8 +130,8 @@ export default function ScanDetailsPage({ params }: { params: { id: string } }) 
     try {
       await scansAPI.kill(scan.id);
       await fetchScanDetails();
-    } catch (err: any) {
-      setKillError(err.message || 'Failed to terminate scan');
+    } catch (err: unknown) {
+      setKillError(getErrorMessage(err, 'Failed to terminate scan'));
     } finally {
       setKillLoading(false);
     }

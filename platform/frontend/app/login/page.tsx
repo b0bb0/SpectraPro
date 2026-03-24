@@ -3,6 +3,7 @@
 import { useState, FormEvent } from 'react'
 import Link from 'next/link'
 import { Shield, Mail, Lock, AlertCircle, Loader2, Sparkles } from 'lucide-react'
+import { getErrorMessage } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import StarCanvas from '@/components/StarCanvas'
 
@@ -19,8 +20,8 @@ export default function LoginPage() {
     setIsLoading(true)
     try {
       await login(email, password)
-    } catch (err: any) {
-      setError(err.message || 'Invalid email or password')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Invalid email or password'))
       setIsLoading(false)
     }
   }

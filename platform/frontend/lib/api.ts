@@ -2,6 +2,129 @@
  * API Client Utilities
  */
 
+// ──────────────────────────────────────────────────────
+// Shared response interfaces for commonly used endpoints
+// ──────────────────────────────────────────────────────
+
+export interface DashboardMetrics {
+  totalAssets: number;
+  totalVulnerabilities: number;
+  openVulnerabilities: number;
+  criticalAssets: number;
+  newVulnerabilities: number;
+  mitigatedVulnerabilities: number;
+  riskScore: number;
+  severityCounts: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  trends: {
+    vulnerabilities: { value: number; direction: 'up' | 'down' | 'stable' };
+    critical: { value: number; direction: 'up' | 'down' | 'stable' };
+  };
+  timeRange: string;
+}
+
+export interface RiskTrendPoint {
+  date: string;
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface SeverityDistribution {
+  severity: string;
+  count: number;
+}
+
+export interface AssetsByCategory {
+  byType: Array<{ category: string; count: number }>;
+  byEnvironment: Array<{ category: string; count: number }>;
+  byCriticality: Array<{ category: string; count: number }>;
+}
+
+export interface TopVulnerability {
+  id: string;
+  title: string;
+  severity: string;
+  cvssScore: number | null;
+  cveId: string | null;
+  status: string;
+  firstSeen: string;
+  asset: { id: string; name: string; type: string };
+}
+
+export interface RecentScan {
+  id: string;
+  status: string;
+  scanProfile: string;
+  createdAt: string;
+  completedAt: string | null;
+  assets: { id: string; name: string };
+}
+
+export interface ScanSummary {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  startedAt: string;
+  createdAt: string;
+  completedAt?: string;
+  progress: number;
+  currentPhase?: string;
+  templatesTotal?: number;
+  templatesRun?: number;
+  vulnFound: number;
+  criticalCount: number;
+  highCount: number;
+  mediumCount: number;
+  lowCount: number;
+  infoCount: number;
+  errorMessage?: string;
+  scanProfile?: string;
+  assets?: {
+    id: string;
+    name: string;
+    hostname?: string;
+    ipAddress?: string;
+  };
+  vulnerabilities?: Array<{
+    id: string;
+    title: string;
+    description: string;
+    severity: string;
+    cvssScore: number;
+    cveId: string;
+    status: string;
+    firstSeen: string;
+  }>;
+}
+
+export interface VulnerabilityRecord {
+  id: string;
+  title: string;
+  description: string;
+  severity: string;
+  cvssScore: number;
+  cveId: string;
+  status: string;
+  firstSeen: string;
+  lastSeen: string;
+  assets: {
+    id: string;
+    name: string;
+    type: string;
+    environment?: string;
+  };
+  _count: {
+    evidence: number;
+  };
+}
+
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   (process.env.NODE_ENV === 'development' ? 'http://localhost:5001' : '');
@@ -21,6 +144,24 @@ export class APIError extends Error {
     super(message);
     this.name = 'APIError';
   }
+}
+
+// ──────────────────────────────────────────────────────
+// Error helpers
+// ──────────────────────────────────────────────────────
+
+/**
+ * Safely extract a human-readable message from an unknown catch value.
+ * Prefers APIError.message, falls back to a default string.
+ */
+export function getErrorMessage(error: unknown, fallback = 'An unexpected error occurred'): string {
+  if (error instanceof APIError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
 }
 
 interface APIResponse<T = any> {
@@ -222,27 +363,27 @@ export const authAPI = {
 // Dashboard API
 export const dashboardAPI = {
   async getMetrics(timeRange: string = '30d') {
-    return fetchAPI(`/api/dashboard/metrics?range=${timeRange}`);
+    return fetchAPI<DashboardMetrics>(`/api/dashboard/metrics?range=${timeRange}`);
   },
 
   async getRiskTrend(timeRange: string = '30d') {
-    return fetchAPI(`/api/dashboard/risk-trend?range=${timeRange}`);
+    return fetchAPI<RiskTrendPoint[]>(`/api/dashboard/risk-trend?range=${timeRange}`);
   },
 
   async getSeverityDistribution() {
-    return fetchAPI('/api/dashboard/severity-distribution');
+    return fetchAPI<SeverityDistribution[]>('/api/dashboard/severity-distribution');
   },
 
   async getAssetsByCategory() {
-    return fetchAPI('/api/dashboard/assets-by-category');
+    return fetchAPI<AssetsByCategory>('/api/dashboard/assets-by-category');
   },
 
   async getTopVulnerabilities(limit: number = 10) {
-    return fetchAPI(`/api/dashboard/top-vulnerabilities?limit=${limit}`);
+    return fetchAPI<TopVulnerability[]>(`/api/dashboard/top-vulnerabilities?limit=${limit}`);
   },
 
   async getRecentScans(limit: number = 5) {
-    return fetchAPI(`/api/dashboard/recent-scans?limit=${limit}`);
+    return fetchAPI<RecentScan[]>(`/api/dashboard/recent-scans?limit=${limit}`);
   },
 };
 
@@ -326,11 +467,11 @@ export const vulnerabilitiesAPI = {
     assetId?: string;
   }) {
     const query = new URLSearchParams(params as any).toString();
-    return fetchAPIWithMeta(`/api/vulnerabilities?${query}`);
+    return fetchAPIWithMeta<VulnerabilityRecord[]>(`/api/vulnerabilities?${query}`);
   },
 
   async get(id: string) {
-    return fetchAPI(`/api/vulnerabilities/${id}`);
+    return fetchAPI<VulnerabilityRecord>(`/api/vulnerabilities/${id}`);
   },
 
   async create(data: any) {
@@ -371,15 +512,15 @@ export const scansAPI = {
   },
 
   async getAll() {
-    return fetchAPI<any[]>('/api/scans');
+    return fetchAPI<ScanSummary[]>('/api/scans');
   },
 
   async get(id: string) {
-    return fetchAPI(`/api/scans/${id}`);
+    return fetchAPI<ScanSummary>(`/api/scans/${id}`);
   },
 
   async getById(id: string) {
-    return fetchAPI<any>(`/api/scans/${id}`);
+    return fetchAPI<ScanSummary>(`/api/scans/${id}`);
   },
 
   async create(data: {

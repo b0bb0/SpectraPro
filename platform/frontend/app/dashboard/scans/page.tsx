@@ -1,6 +1,6 @@
 'use client';
 
-import { MouseEvent, useEffect, useState } from 'react';
+import { MouseEvent, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCw, CheckCircle, XCircle, Clock, Target, Search, X, Layers, Square } from 'lucide-react';
 import { scansAPI } from '@/lib/api';
@@ -48,12 +48,12 @@ export default function ScansPage() {
   const { lastEvent, isConnected } = useWebSocket();
   const { bulkProgress, isRunning: isBulkScanRunning } = useBulkScanUpdates();
 
-  const fetchScans = async () => {
+  const fetchScans = useCallback(async () => {
     try {
       const data = await scansAPI.getAll();
       setScans(data || []);
       setError('');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to load scans:', err);
       // Secure error handling - generic user message only
       setError('Unable to load scans. Please try again.');
@@ -61,7 +61,7 @@ export default function ScansPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchScans();
@@ -72,7 +72,7 @@ export default function ScansPage() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchScans]);
 
   // Handle WebSocket events for real-time updates
   useEffect(() => {
@@ -111,7 +111,7 @@ export default function ScansPage() {
       // Refresh list when bulk scan completes
       fetchScans();
     }
-  }, [lastEvent]);
+  }, [lastEvent, fetchScans]);
 
   const handleScanStarted = (scanId: string) => {
     setShowScanModal(false);

@@ -15,9 +15,44 @@ const router = Router();
 router.use(requireAuth);
 router.use(enforceTenantIsolation);
 
+/**
+ * Validate a scan target string.
+ * Accepts URLs (http/https) and bare hostnames/IPs.
+ * Rejects anything that could be interpreted as a CLI flag or contains
+ * shell metacharacters, preventing argument injection into Nuclei.
+ */
+function isValidScanTarget(target: string): boolean {
+  const trimmed = target.trim();
+
+  // Block empty strings
+  if (trimmed.length === 0) return false;
+
+  // Block CLI flag injection (e.g. "--config /etc/passwd", "-iL /tmp/list")
+  if (trimmed.startsWith('-')) return false;
+
+  // Block shell metacharacters and whitespace that could break arg parsing
+  // Allow only: letters, digits, . : / - _ ~ @ ! $ & ' ( ) * + , ; = % ? # [ ]
+  // This is the set of characters valid in URLs per RFC 3986
+  if (/[\s`|><{}\\"^]/.test(trimmed)) return false;
+
+  // Block null bytes
+  if (trimmed.includes('\0')) return false;
+
+  // Must look like a URL or hostname/IP
+  // Accepted forms: http(s)://..., hostname, hostname:port, IPv4, IPv4:port
+  const urlPattern = /^https?:\/\/[^\s]+$/;
+  const hostPattern = /^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?(:\d{1,5})?$/;
+  const ipv4Pattern = /^\d{1,3}(\.\d{1,3}){3}(:\d{1,5})?$/;
+  const ipv6BracketPattern = /^\[[\da-fA-F:]+\](:\d{1,5})?$/;
+
+  return urlPattern.test(trimmed) || hostPattern.test(trimmed) || ipv4Pattern.test(trimmed) || ipv6BracketPattern.test(trimmed);
+}
+
 // Validation schemas
 const startScanSchema = z.object({
-  target: z.string().min(1, 'Target is required'),
+  target: z.string().min(1, 'Target is required').refine(isValidScanTarget, {
+    message: 'Invalid scan target. Must be a valid URL (http/https), hostname, or IP address.',
+  }),
   scanLevel: z.enum(['light', 'normal', 'extreme'], {
     errorMap: () => ({ message: 'Invalid scan level. Must be light, normal, or extreme' }),
   }),
@@ -38,7 +73,9 @@ const startScanSchema = z.object({
 });
 
 const bulkScanSchema = z.object({
-  targets: z.array(z.string().min(1, 'Target cannot be empty')).min(1, 'At least one target is required').max(50, 'Maximum 50 targets allowed'),
+  targets: z.array(z.string().min(1, 'Target cannot be empty').refine(isValidScanTarget, {
+    message: 'Invalid scan target. Must be a valid URL (http/https), hostname, or IP address.',
+  })).min(1, 'At least one target is required').max(50, 'Maximum 50 targets allowed'),
   scanLevel: z.enum(['light', 'normal', 'extreme'], {
     errorMap: () => ({ message: 'Invalid scan level. Must be light, normal, or extreme' }),
   }),
@@ -315,7 +352,9 @@ router.post('/bulk', async (req, res, next) => {
  * Accepts Nuclei JSONL results and creates a scan record with vulnerabilities.
  */
 const ingestSchema = z.object({
-  target: z.string().min(1),
+  target: z.string().min(1).refine(isValidScanTarget, {
+    message: 'Invalid scan target. Must be a valid URL (http/https), hostname, or IP address.',
+  }),
   scanLevel: z.enum(['light', 'normal', 'extreme']).default('normal'),
   results: z.array(z.object({
     'template-id': z.string(),

@@ -4,6 +4,7 @@ import { useState, FormEvent, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Shield, Mail, Lock, AlertCircle, Loader2, User, Building2 } from 'lucide-react'
+import { getErrorMessage } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import StarCanvas from '@/components/StarCanvas'
 
@@ -68,8 +69,8 @@ export default function RegisterPage() {
         tenantName,
       })
       // AuthContext will handle redirect to /dashboard
-    } catch (err: any) {
-      setError(err.message || 'Registration failed')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Registration failed'))
       setIsLoading(false)
     }
   }
