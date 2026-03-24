@@ -3,7 +3,7 @@
 ## Port Configuration
 
 The Spectra platform is configured to run on:
-- **Frontend**: http://localhost:3001 (avoiding conflict with Ollama WebUI on 3000)
+- **Frontend**: http://localhost:3003 (avoiding conflict with Ollama WebUI on 3000)
 - **Backend API**: http://localhost:5001
 
 ---
@@ -29,7 +29,7 @@ cat > .env << 'EOF'
 DATABASE_URL="postgresql://groot:@localhost:5432/spectra_platform"
 JWT_SECRET="spectra-secret-key-change-in-production"
 JWT_EXPIRES_IN="24h"
-FRONTEND_URL="http://localhost:3001"
+FRONTEND_URL="http://localhost:3003"
 NODE_ENV="development"
 PORT=5001
 LOG_LEVEL="info"
@@ -74,7 +74,7 @@ cd /Users/groot/spectra/platform/frontend
 npm run dev
 ```
 
-✅ Frontend running on: **http://localhost:3001**
+✅ Frontend running on: **http://localhost:3003**
 
 ---
 
@@ -82,7 +82,7 @@ npm run dev
 
 Open your browser and navigate to:
 
-### 🌐 http://localhost:3001
+### 🌐 http://localhost:3003
 
 ---
 
@@ -192,7 +192,7 @@ npx prisma generate
 ## Next Steps
 
 1. ✅ Start backend and frontend
-2. ✅ Open http://localhost:3001
+2. ✅ Open http://localhost:3003
 3. ✅ View the landing page
 4. 📋 Login page needs to be built (see STATUS.md)
 5. 📋 Dashboard needs to be built (see STATUS.md)
@@ -205,9 +205,9 @@ See [STATUS.md](STATUS.md) for complete development status.
 
 | What | URL | Status |
 |------|-----|--------|
-| Landing Page | http://localhost:3001 | ✅ Complete |
-| Login Page | http://localhost:3001/login | ⏳ Pending |
-| Dashboard | http://localhost:3001/dashboard | ⏳ Pending |
+| Landing Page | http://localhost:3003 | ✅ Complete |
+| Login Page | http://localhost:3003/login | ⏳ Pending |
+| Dashboard | http://localhost:3003/dashboard | ⏳ Pending |
 | Backend API | http://localhost:5001 | ✅ Complete |
 | Health Check | http://localhost:5001/health | ✅ Complete |
 
@@ -215,5 +215,5 @@ See [STATUS.md](STATUS.md) for complete development status.
 
 **Your other services:**
 - Ollama WebUI: http://localhost:3000 ✅
-- Spectra Platform: http://localhost:3001 (this app)
+- Spectra Platform: http://localhost:3003 (this app)
 - Backend API: http://localhost:5001

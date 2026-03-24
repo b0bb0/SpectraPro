@@ -162,7 +162,7 @@ echo "NEXT_PUBLIC_API_URL=http://localhost:5001" > .env.local
 npm run dev
 ```
 
-Frontend runs on: `http://localhost:3000`
+Frontend runs on: `http://localhost:3003`
 
 ## 📊 What Still Needs Implementation
 

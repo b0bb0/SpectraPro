@@ -80,9 +80,23 @@ chmod +x QUICK_START.sh
    ```
 
 5. **Access Platform**
-   - Frontend: http://localhost:3000
+   - Frontend: http://localhost:3003
    - Backend API: http://localhost:5001
    - API Health: http://localhost:5001/health
+
+### Design/UX Dev Server
+
+- For UI copy/style work, run just the Next.js dev server:
+  ```bash
+  cd frontend
+  NEXT_PUBLIC_API_URL=http://localhost:5001 npm run dev
+  ```
+  The design preview is available at http://localhost:3003.
+- Embedding in design tools (e.g. Builder): keep `npm run dev` running, then in another terminal:
+  ```bash
+  BUILDER_PROXY_TARGET=http://localhost:3003 BUILDER_PROXY_PORT=48752 npm run builder:proxy
+  ```
+  Point your design tool to the proxy URL so assets under `/_next/*` load correctly.
 
 ## 📁 Project Structure
 

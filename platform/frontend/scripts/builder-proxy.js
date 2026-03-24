@@ -8,7 +8,7 @@
  * running Next dev server.
  *
  * Usage:
- *   1) `npm run dev` (port 3001)
+ *   1) `npm run dev` (port 3003)
  *   2) `BUILDER_PROXY_PORT=48752 npm run builder:proxy`
  *   3) Point Builder/localEditUrl to `http://localhost:48752`
  */
@@ -16,7 +16,7 @@
 const http = require('http');
 const httpProxy = require('http-proxy');
 
-const TARGET = process.env.BUILDER_PROXY_TARGET || 'http://localhost:3001';
+const TARGET = process.env.BUILDER_PROXY_TARGET || 'http://localhost:3003';
 const PORT = parseInt(process.env.BUILDER_PROXY_PORT || '48752', 10);
 
 const proxy = httpProxy.createProxyServer({
@@ -52,4 +52,3 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`[builder-proxy] listening on http://localhost:${PORT}`);
   console.log(`[builder-proxy] forwarding to ${TARGET}`);
 });
-
