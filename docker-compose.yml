@@ -47,6 +47,7 @@ services:
 
   # ── Backend API ──────────────────────────────────────────────────
   backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/b0bb0/spectrapro/backend:latest}
     build:
       context: ./platform/backend
       dockerfile: Dockerfile
@@ -71,6 +72,7 @@ services:
 
   # ── Frontend ─────────────────────────────────────────────────────
   frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/b0bb0/spectrapro/frontend:latest}
     build:
       context: ./platform/frontend
       dockerfile: Dockerfile
@@ -85,6 +87,7 @@ services:
 
   # ── Python Scanner API ──────────────────────────────────────────
   scanner:
+    image: ${SCANNER_IMAGE:-ghcr.io/b0bb0/spectrapro/scanner:latest}
     build:
       context: .
       dockerfile: Dockerfile.scanner
