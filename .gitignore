@@ -80,3 +80,6 @@ postgres_data/
 trail-of-bits-security/
 trail-of-bits-security.zip
 spectra_scanner.egg-info/
+
+# Git worktrees
+.worktrees/
