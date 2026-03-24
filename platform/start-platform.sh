@@ -47,7 +47,7 @@ fi
 if [ ! -f "$SCRIPT_DIR/frontend/.env.local" ]; then
     echo "Creating frontend .env.local..."
     echo "NEXT_PUBLIC_API_URL=http://localhost:5001" > "$SCRIPT_DIR/frontend/.env.local"
-    echo "PORT=3001" >> "$SCRIPT_DIR/frontend/.env.local"
+    echo "PORT=3003" >> "$SCRIPT_DIR/frontend/.env.local"
 fi
 
 echo ""
@@ -76,7 +76,7 @@ BACKEND_PID=$!
 sleep 3
 
 # Start frontend in background
-echo "${BLUE}🚀 Starting Frontend on port 3001...${NC}"
+echo "${BLUE}🚀 Starting Frontend on port 3003...${NC}"
 cd "$SCRIPT_DIR/frontend"
 npm run dev > /tmp/spectra-frontend.log 2>&1 &
 FRONTEND_PID=$!
@@ -88,7 +88,7 @@ echo ""
 echo "${GREEN}✅ Spectra Platform is running!${NC}"
 echo ""
 echo "📍 URLs:"
-echo "   Frontend:  ${GREEN}http://localhost:3001${NC}"
+echo "   Frontend:  ${GREEN}http://localhost:3003${NC}"
 echo "   Backend:   ${GREEN}http://localhost:5001${NC}"
 echo "   Health:    ${GREEN}http://localhost:5001/health${NC}"
 echo ""

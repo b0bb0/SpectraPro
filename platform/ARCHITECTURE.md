@@ -387,7 +387,7 @@ docker-compose -f docker-compose.prod.yml up -d
 DATABASE_URL=postgresql://...
 JWT_SECRET=...
 JWT_EXPIRES_IN=24h
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=http://localhost:3003
 API_URL=http://localhost:5001
 NODE_ENV=production
 ```

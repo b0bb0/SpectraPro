@@ -303,7 +303,7 @@ curl http://localhost:5001/api/dashboard/metrics -b cookies.txt
 cd /Users/groot/spectra/platform/frontend
 npm install
 npm run dev
-# Open http://localhost:3000
+# Open http://localhost:3003
 ```
 
 ## 🎨 Visual Quality Bar
