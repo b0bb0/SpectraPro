@@ -296,6 +296,24 @@ export class DashboardService {
   }
 
   /**
+   * Get all dashboard data in a single batched call.
+   * Runs all sub-queries concurrently to minimise latency.
+   */
+  async getOverview(tenantId: string, timeRange: string) {
+    const [metrics, riskTrend, severityDistribution, assetsByCategory, topVulnerabilities, recentScans] =
+      await Promise.all([
+        this.getMetrics(tenantId, timeRange),
+        this.getRiskTrend(tenantId, timeRange),
+        this.getSeverityDistribution(tenantId),
+        this.getAssetsByCategory(tenantId),
+        this.getTopVulnerabilities(tenantId, 5),
+        this.getRecentScans(tenantId, 4),
+      ]);
+
+    return { metrics, riskTrend, severityDistribution, assetsByCategory, topVulnerabilities, recentScans };
+  }
+
+  /**
    * Get recent scans
    */
   async getRecentScans(tenantId: string, limit: number) {

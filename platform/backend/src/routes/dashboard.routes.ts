@@ -119,4 +119,23 @@ router.get('/recent-scans', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/dashboard/overview
+ * Batched endpoint — returns all dashboard data in one request.
+ * Replaces the 5 separate calls the frontend previously made on load.
+ */
+router.get('/overview', async (req, res, next) => {
+  try {
+    const timeRange = req.query.range as string || '30d';
+    const overview = await dashboardService.getOverview(req.tenantId!, timeRange);
+
+    res.json({
+      success: true,
+      data: overview,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

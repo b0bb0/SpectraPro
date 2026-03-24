@@ -74,34 +74,18 @@ export default function DashboardPage() {
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d')
   const [showScanModal, setShowScanModal] = useState(false)
 
-  // SWR: auto-caching, revalidation on focus, deduplication
-  const swrOpts = { revalidateOnFocus: true, dedupingInterval: 5000 }
-  const { data: metrics, isLoading: metricsLoading, error: metricsError, mutate: mutateMetrics } = useSWR<DashboardMetrics>(
-    `/api/dashboard/metrics?range=${timeRange}`,
-    (url: string) => dashboardAPI.getMetrics(timeRange),
-    swrOpts
+  // Single batched request replaces 5 separate API calls
+  const { data: overview, isLoading: loading, error: metricsError, mutate: mutateMetrics } = useSWR(
+    `/api/dashboard/overview?range=${timeRange}`,
+    () => dashboardAPI.getOverview(timeRange),
+    { revalidateOnFocus: false, dedupingInterval: 10000 }
   )
-  const { data: riskTrend = [] } = useSWR<RiskTrendData[]>(
-    `/api/dashboard/risk-trend?range=${timeRange}`,
-    () => dashboardAPI.getRiskTrend(timeRange),
-    swrOpts
-  )
-  const { data: assetsByCategory } = useSWR<AssetsByCategory>(
-    '/api/dashboard/assets-by-category',
-    () => dashboardAPI.getAssetsByCategory(),
-    swrOpts
-  )
-  const { data: topVulnerabilities = [] } = useSWR<TopVulnerability[]>(
-    '/api/dashboard/top-vulnerabilities?limit=5',
-    () => dashboardAPI.getTopVulnerabilities(5),
-    swrOpts
-  )
-  const { data: recentScans = [] } = useSWR<RecentScan[]>(
-    '/api/dashboard/recent-scans?limit=4',
-    () => dashboardAPI.getRecentScans(4),
-    swrOpts
-  )
-  const loading = metricsLoading
+
+  const metrics = overview?.metrics
+  const riskTrend: RiskTrendData[] = overview?.riskTrend ?? []
+  const assetsByCategory = overview?.assetsByCategory
+  const topVulnerabilities: TopVulnerability[] = overview?.topVulnerabilities ?? []
+  const recentScans: RecentScan[] = overview?.recentScans ?? []
 
   const handleScanStarted = (scanId: string) => {
     setShowScanModal(false)

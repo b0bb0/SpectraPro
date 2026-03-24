@@ -57,7 +57,7 @@
   body {
     background: var(--color-bg);
     color: var(--color-text);
-    font-family: 'Space Grotesk', var(--font-body), system-ui, sans-serif;
+    font-family: var(--font-body), 'Inter Tight', system-ui, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
     min-height: 100vh;
     transition: background-color 200ms ease, color 200ms ease;
@@ -65,8 +65,8 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Space Grotesk', var(--font-heading), sans-serif;
-    letter-spacing: -0.02em;
+    font-family: var(--font-heading), 'JetBrains Mono', monospace;
+    letter-spacing: -0.03em;
   }
 
   h1 { font-size: clamp(2.4rem, 3vw, 3.2rem); line-height: 1.1; }
@@ -80,7 +80,7 @@
   }
 
   code, pre, .mono {
-    font-family: 'Space Mono', monospace;
+    font-family: var(--font-heading), 'JetBrains Mono', monospace;
   }
 }
 
@@ -254,7 +254,7 @@
     border-radius: 9999px;
     font-size: 0.75rem;
     font-weight: 600;
-    font-family: 'Space Mono', monospace;
+    font-family: var(--font-heading), 'JetBrains Mono', monospace;
     letter-spacing: 0.04em;
     border: 1px solid transparent;
   }
@@ -343,7 +343,7 @@
     background: rgba(14, 14, 58, 0.4);
     border: 1px solid rgba(157, 95, 255, 0.15);
     color: var(--color-text);
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: var(--font-body), 'Inter Tight', sans-serif;
     @apply transition-all;
   }
   .input-field::placeholder {
@@ -377,7 +377,7 @@
     background: rgba(14, 14, 58, 0.4);
     border: 1px solid rgba(157, 95, 255, 0.15);
     color: var(--color-text);
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: var(--font-body), 'Inter Tight', sans-serif;
     @apply transition-all duration-200;
   }
   input:focus, textarea:focus, select:focus {
@@ -392,7 +392,7 @@
   th {
     @apply text-left text-sm uppercase tracking-wider;
     color: var(--color-gold);
-    font-family: 'Space Mono', monospace;
+    font-family: var(--font-heading), 'JetBrains Mono', monospace;
     font-weight: 600;
     font-size: 0.7rem;
     letter-spacing: 0.08em;
@@ -477,4 +477,220 @@
     clip: auto;
     white-space: normal;
   }
+}
+
+/* ═══════════════════════════════════════════════
+   LANDING PAGE — Tactical effects
+   ═══════════════════════════════════════════════ */
+
+/* Noise texture overlay */
+.noise-overlay::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* Scanline overlay */
+.scanlines::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(2, 2, 13, 0.03) 2px,
+    rgba(2, 2, 13, 0.03) 4px
+  );
+}
+
+/* Glitch text effect */
+@keyframes glitch {
+  0%, 100% { transform: translate(0); }
+  20% { transform: translate(-2px, 1px); }
+  40% { transform: translate(2px, -1px); }
+  60% { transform: translate(-1px, -1px); }
+  80% { transform: translate(1px, 2px); }
+}
+
+@keyframes glitchClip {
+  0% { clip-path: inset(40% 0 61% 0); }
+  20% { clip-path: inset(92% 0 1% 0); }
+  40% { clip-path: inset(43% 0 1% 0); }
+  60% { clip-path: inset(25% 0 58% 0); }
+  80% { clip-path: inset(54% 0 7% 0); }
+  100% { clip-path: inset(58% 0 43% 0); }
+}
+
+.glitch-text {
+  position: relative;
+}
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+.glitch-text::before {
+  animation: glitchClip 3s infinite linear alternate-reverse;
+  background: var(--color-bg);
+  color: var(--color-gold);
+  left: 2px;
+}
+.glitch-text::after {
+  animation: glitchClip 3s 0.5s infinite linear alternate-reverse;
+  background: var(--color-bg);
+  color: var(--color-purple);
+  left: -2px;
+}
+
+/* Typewriter cursor blink */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.cursor-blink::after {
+  content: '|';
+  animation: blink 0.8s step-end infinite;
+  color: var(--color-gold);
+  font-weight: 300;
+  margin-left: 2px;
+}
+
+/* Gradient border animation */
+@keyframes borderRotate {
+  0% { --angle: 0deg; }
+  100% { --angle: 360deg; }
+}
+
+@property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.gradient-border {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  padding: 1px;
+  background: conic-gradient(from var(--angle), transparent 25%, var(--color-gold) 50%, var(--color-purple) 75%, transparent 100%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: borderRotate 4s linear infinite;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.gradient-border:hover::before {
+  opacity: 1;
+}
+
+/* Horizontal pipeline line connector */
+.pipeline-connector {
+  position: relative;
+}
+.pipeline-connector::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -24px;
+  width: 24px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--color-gold), transparent);
+}
+.pipeline-connector:last-child::after {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════
+   MOBILE PERFORMANCE — strip GPU-heavy effects
+   on devices where backdrop-filter and large
+   CSS blurs cause frame drops and janky scrolling
+   ═══════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* Aurora blobs: filter:blur(120px) on animated 450-600px divs
+     is the single biggest GPU hog on mobile. Replace with a
+     simple static radial-gradient (no blur, no animation). */
+  .aurora-1, .aurora-2, .aurora-3 {
+    filter: none;
+    animation: none;
+    opacity: 0.18;
+  }
+
+  /* backdrop-filter:blur() forces every element into its own
+     composited GPU layer. On a dashboard with dozens of panels
+     this saturates mobile GPU memory bandwidth.
+     Swap to a solid semi-transparent background instead. */
+  .cosmic-panel {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(14, 14, 58, 0.92);
+  }
+
+  .glass {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(14, 14, 58, 0.88);
+  }
+
+  .glass-light {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(14, 14, 58, 0.80);
+  }
+
+  /* Noise + scanline overlays require fixed-position full-screen
+     repaints on every scroll — disable on mobile. */
+  .noise-overlay::before,
+  .scanlines::after {
+    display: none;
+  }
+
+  /* Continuous animations (drift, gemglow, gradientShift)
+     keep the GPU awake even when nothing appears to be moving.
+     Pause them all on mobile. */
+  .gradient-bg {
+    animation: none;
+    background-position: 0% 50%;
+  }
+
+  .cosmic-glow {
+    animation: none;
+  }
+
+  /* Rotating gradient border is a conic-gradient + custom property
+     animation — expensive on mobile. Simplify to static border. */
+  .gradient-border::before {
+    animation: none;
+    background: none;
+  }
+}
+
+/* Respect the user's own reduced-motion preference at any screen size */
+@media (prefers-reduced-motion: reduce) {
+  .aurora-1, .aurora-2, .aurora-3 { animation: none; }
+  .gradient-bg { animation: none; }
+  .cosmic-glow { animation: none; }
+  .gradient-border::before { animation: none; }
+  .skeleton { animation: none; }
 }

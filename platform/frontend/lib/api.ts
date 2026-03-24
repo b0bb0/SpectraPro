@@ -72,36 +72,21 @@ export interface ScanSummary {
   type: string;
   status: string;
   startedAt: string;
-  createdAt: string;
   completedAt?: string;
-  progress: number;
+  progress?: number;
   currentPhase?: string;
-  templatesTotal?: number;
-  templatesRun?: number;
   vulnFound: number;
   criticalCount: number;
   highCount: number;
   mediumCount: number;
   lowCount: number;
   infoCount: number;
-  errorMessage?: string;
-  scanProfile?: string;
   assets?: {
     id: string;
     name: string;
     hostname?: string;
     ipAddress?: string;
   };
-  vulnerabilities?: Array<{
-    id: string;
-    title: string;
-    description: string;
-    severity: string;
-    cvssScore: number;
-    cveId: string;
-    status: string;
-    firstSeen: string;
-  }>;
 }
 
 export interface VulnerabilityRecord {
@@ -362,6 +347,18 @@ export const authAPI = {
 
 // Dashboard API
 export const dashboardAPI = {
+  async getOverview(timeRange: string = '30d') {
+    return fetchAPI<{
+      metrics: DashboardMetrics;
+      riskTrend: RiskTrendPoint[];
+      severityDistribution: SeverityDistribution[];
+      assetsByCategory: AssetsByCategory;
+      topVulnerabilities: TopVulnerability[];
+      recentScans: RecentScan[];
+    }>(`/api/dashboard/overview?range=${timeRange}`);
+  },
+
+  // Individual endpoints kept for targeted refreshes
   async getMetrics(timeRange: string = '30d') {
     return fetchAPI<DashboardMetrics>(`/api/dashboard/metrics?range=${timeRange}`);
   },
