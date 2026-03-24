@@ -1,5 +1,9 @@
 # 📚 Complete Resource Index - Security Tools & Documentation
 
+## 🔧 Copilot coding agent environment
+- `COPILOT_AGENT_ENVIRONMENT.md` — How to customize the Copilot coding agent environment for this repo.
+- `.github/workflows/copilot-setup-steps.yml` — Workflow that preinstalls Node/Python dependencies before Copilot sessions.
+
 ## 🎯 This Session - Ollama LLM Integration
 
 ### New Files Created (This Session)
