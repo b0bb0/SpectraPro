@@ -12,6 +12,8 @@ RUN cargo install feroxbuster --locked
 
 # ── Stage 1: Install deps + generate Prisma client ───────────────
 FROM node:20-alpine AS deps
+ENV PRISMA_HIDE_UPDATE_MESSAGE=1 \
+    NO_UPDATE_NOTIFIER=1
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
@@ -20,6 +22,8 @@ RUN npx prisma generate
 
 # ── Stage 2: Compile TypeScript ──────────────────────────────────
 FROM node:20-alpine AS builder
+ENV PRISMA_HIDE_UPDATE_MESSAGE=1 \
+    NO_UPDATE_NOTIFIER=1
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
@@ -29,6 +33,8 @@ RUN npm run build
 
 # ── Stage 3: Production image ────────────────────────────────────
 FROM node:20-alpine AS runner
+ENV PRISMA_HIDE_UPDATE_MESSAGE=1 \
+    NO_UPDATE_NOTIFIER=1
 WORKDIR /app
 ENV NODE_ENV=production
 
